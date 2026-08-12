@@ -22,9 +22,43 @@ class Spot:
     # 이 포인트가 특히 취약한 너울 방향(도). 해당 방향 너울이 들어오면 경고를 올린다.
     exposed_from: tuple[int, int] | None = None
     note: str = ""
+    # 출입 통제가 있는 곳. 브리핑에 확인 안내를 붙인다.
+    access_check: str = ""
 
+
+# 비크로프트 반도 전체가 호주 해군 사격장(Beecroft Weapons Range) 구역이다.
+# 주말과 NSW 공휴일·방학에는 개방하지만 군사 활동·날씨·도로 사정으로 단기
+# 통보 없이 닫힌다. 폐쇄 시 경계에 붉은 깃발이 걸린다.
+BEECROFT_ACCESS = "사격장 개방 확인 필수 (Range Control 4448 3839)"
+BEECROFT_URL = "https://www.defence.gov.au/about/locations-property/beecroft-weapons-range-peninsula"
 
 SPOTS: dict[str, Spot] = {
+    # --- 저비스 베이 / 비크로프트 반도 ---
+    "little_beecroft": Spot(
+        "little_beecroft", "리틀 비크로프트 헤드", -35.0270, 150.8590,
+        exposed_from=(20, 190),
+        note="절벽 아래 갯바위. 너울 올라오면 퇴로가 짧다",
+        access_check=BEECROFT_ACCESS,
+    ),
+    "beecroft_head": Spot(
+        "beecroft_head", "비크로프트 헤드 (빅 비크로프트)", -35.0150, 150.8608,
+        exposed_from=(20, 190),
+        note="LBG 명소. 그만큼 너울이 크게 들어온다",
+        access_check=BEECROFT_ACCESS,
+    ),
+    "point_perp": Spot(
+        "point_perp", "포인트 퍼펜디큘러", -35.0925, 150.8047,
+        exposed_from=(100, 220),
+        note="만 입구 남향. 남풍·남너울에 직격",
+        access_check=BEECROFT_ACCESS,
+    ),
+    "currarong": Spot(
+        "currarong", "커라롱", -35.0122, 150.8264,
+        exposed_from=(20, 120),
+        note="반도 북쪽. 남너울에는 상대적으로 가려진다",
+    ),
+
+    # --- 시드니~울릉공 구간 ---
     "kurnell": Spot(
         "kurnell", "커넬 (케이프 솔랜더)", -34.0136, 151.2233,
         exposed_from=(90, 200),
@@ -74,10 +108,14 @@ SPOTS: dict[str, Spot] = {
     ),
 }
 
-DEFAULT_SPOT = "wollongong"
+DEFAULT_SPOT = "little_beecroft"
 
 # 브리핑 기준 시간대. 호주 NSW는 서머타임이 있어 UTC 고정 오프셋을 쓰면 안 된다.
 TIMEZONE = "Australia/Sydney"
+
+# 새벽 6시 입수. 위험도는 이 시각을 중심으로 한 구간에서 판정한다.
+SESSION_START_HOUR = 6
+SESSION_WINDOW = (4, 11)  # 준비~철수까지 실제로 갯바위에 있는 시간대
 
 
 def get_spot(key: str) -> Spot:

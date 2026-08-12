@@ -89,11 +89,19 @@ def _get(url: str, params: dict) -> dict:
 
 
 def fetch(lat: float, lon: float, timezone: str, days: int = 7) -> dict:
-    """marine + forecast 두 엔드포인트를 합쳐 시간별 시계열을 돌려준다."""
+    """marine + forecast 두 엔드포인트를 합쳐 시간별 시계열을 돌려준다.
+
+    일출/일몰은 daily 응답에서 받아 _sunrise / _sunset 키로 함께 실어 보낸다.
+    새벽에 들어가면 6시가 아직 어두운지가 실질적인 정보라 브리핑에 넣는다.
+    """
     common = {"latitude": lat, "longitude": lon, "timezone": timezone, "forecast_days": days}
 
     marine = _get(MARINE_URL, {**common, "hourly": ",".join(MARINE_VARS)})
-    wind = _get(FORECAST_URL, {**common, "hourly": ",".join(WIND_VARS)})
+    wind = _get(FORECAST_URL, {
+        **common,
+        "hourly": ",".join(WIND_VARS),
+        "daily": "sunrise,sunset",
+    })
 
     hourly = dict(marine.get("hourly", {}))
     for key, values in wind.get("hourly", {}).items():
@@ -103,7 +111,23 @@ def fetch(lat: float, lon: float, timezone: str, days: int = 7) -> dict:
     if not hourly.get("time"):
         raise MarineError("응답에 시간축이 없습니다. Open-Meteo 응답 형식이 바뀌었을 수 있습니다.")
 
+    daily = wind.get("daily") or {}
+    hourly["_sunrise"] = daily.get("sunrise") or []
+    hourly["_sunset"] = daily.get("sunset") or []
+
     return hourly
+
+
+def sun_times(hourly: dict, day: dt.date) -> tuple[dt.datetime | None, dt.datetime | None]:
+    """해당 날짜의 일출/일몰. 못 받았으면 (None, None)."""
+    def pick(values: list[str]) -> dt.datetime | None:
+        for raw in values:
+            stamp = dt.datetime.fromisoformat(raw)
+            if stamp.date() == day:
+                return stamp
+        return None
+
+    return pick(hourly.get("_sunrise") or []), pick(hourly.get("_sunset") or [])
 
 
 def _series(hourly: dict, key: str) -> list[float | None]:
@@ -135,8 +159,8 @@ def conditions_at(hourly: dict, index: int) -> Conditions:
     )
 
 
-def tide_extremes(hourly: dict, day: dt.date) -> list[Extreme]:
-    """조위 시계열에서 하루치 만조/간조를 뽑는다.
+def all_extremes(hourly: dict) -> list[Extreme]:
+    """조위 시계열 전체에서 만조/간조를 뽑는다.
 
     sea_level_height_msl이 응답에 없으면 빈 리스트를 돌려준다. 조위를 못 구했다고
     브리핑 전체를 실패시키지는 않되, 호출부가 그 사실을 표시하도록 한다.
@@ -166,12 +190,38 @@ def tide_extremes(hourly: dict, day: dt.date) -> list[Extreme]:
         peak_time = times[i] + dt.timedelta(hours=offset)
         peak_level = cur - 0.25 * (prev - nxt) * offset
 
-        if peak_time.date() == day:
-            found.append(
-                Extreme(peak_time, round(peak_level, 2), "high" if is_high else "low")
-            )
+        found.append(Extreme(peak_time, round(peak_level, 2), "high" if is_high else "low"))
 
-    return found
+    return sorted(found, key=lambda e: e.time)
+
+
+def tide_extremes(hourly: dict, day: dt.date) -> list[Extreme]:
+    """하루치 만조/간조."""
+    return [e for e in all_extremes(hourly) if e.time.date() == day]
+
+
+@dataclass
+class TideState:
+    """특정 시각의 물때 상황."""
+    rising: bool
+    next_extreme: Extreme
+
+    @property
+    def label(self) -> str:
+        return "들물" if self.rising else "썰물"
+
+
+def tide_state(hourly: dict, when: dt.datetime) -> TideState | None:
+    """그 시각이 들물인지 썰물인지, 다음 정조가 언제인지.
+
+    갯바위에서는 파고만큼 중요하다. 들물에 들어가면 나올 때 자리가 잠겨 퇴로가
+    끊길 수 있고, 만조 전후로 갯바위를 넘는 물이 올라온다.
+    """
+    upcoming = [e for e in all_extremes(hourly) if e.time > when]
+    if not upcoming:
+        return None
+    nxt = upcoming[0]
+    return TideState(rising=(nxt.kind == "high"), next_extreme=nxt)
 
 
 def risk(cond: Conditions, spot_exposed: tuple[int, int] | None) -> tuple[str, list[str]]:

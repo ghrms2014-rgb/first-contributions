@@ -2,12 +2,13 @@
 """갯바위 낚시용 아침 브리핑 — 파고·너울·물때를 요약해 카카오톡으로 보낸다.
 
     python3 surf_brief.py                    # 오늘 브리핑을 화면에 출력
-    python3 surf_brief.py --spot basspoint   # 포인트 지정
+    python3 surf_brief.py --spot point_perp  # 포인트 지정
     python3 surf_brief.py --send             # 카카오톡으로 전송
     python3 surf_brief.py --date 2026-08-15  # 특정 날짜
 
-토요일에 낚시를 나가므로, 오늘이 토요일이 아니면 다가오는 토요일 전망을
-한 줄 덧붙인다.
+새벽 6시 입수를 기준으로, 실제로 갯바위에 서 있는 시간대(04~11시)의 최악
+조건으로 위험도를 매긴다. 토요일에 낚시를 나가므로 평일 브리핑에는 다가오는
+토요일 전망이 한 줄 붙는다.
 """
 
 from __future__ import annotations
@@ -15,12 +16,21 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import marine
-from marine import Conditions, Extreme, MarineError, compass
-from spots import DEFAULT_SPOT, SPOTS, TIMEZONE, Spot, get_spot
+from marine import Conditions, Extreme, MarineError, TideState, compass
+from spots import (
+    DEFAULT_SPOT,
+    SESSION_START_HOUR,
+    SESSION_WINDOW,
+    SPOTS,
+    TIMEZONE,
+    Spot,
+    get_spot,
+)
 
 # 같은 저장소의 카카오 도구를 재사용한다.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "kakao-notify"))
@@ -28,31 +38,43 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "kakao-notify"))
 WEEKDAY_KO = ["월", "화", "수", "목", "금", "토", "일"]
 SATURDAY = 5
 
-# 갯바위에 실제로 서 있을 만한 시간대. 이 구간의 최악 조건으로 위험도를 매긴다.
-DAY_START, DAY_END = 5, 19
+RISK_ORDER = {"판단불가": -1, "양호": 0, "주의": 1, "위험": 2, "매우위험": 3}
 
 
-def _daylight_indices(times: list[dt.datetime], day: dt.date) -> list[int]:
-    return [
-        i for i, t in enumerate(times)
-        if t.date() == day and DAY_START <= t.hour <= DAY_END
-    ]
+@dataclass
+class Brief:
+    spot: Spot
+    day: dt.date
+    start: Conditions          # 입수 시각(06시)의 조건
+    worst: Conditions          # 세션 구간 중 최악 시점
+    level: str
+    reasons: list[str]
+    extremes: list[Extreme]
+    tide: TideState | None     # 입수 시각의 들물/썰물
+    sunrise: dt.datetime | None
+    saturday: tuple[dt.date, str, Conditions] | None
 
 
-def worst_of_day(hourly: dict, day: dt.date, spot: Spot) -> tuple[Conditions, str, list[str]]:
-    """그날 낮 시간대 중 가장 위험한 시점의 조건을 돌려준다."""
+def _index_at(times: list[dt.datetime], day: dt.date, hour: int) -> int | None:
+    for i, t in enumerate(times):
+        if t.date() == day and t.hour == hour:
+            return i
+    return None
+
+
+def worst_in_session(hourly: dict, day: dt.date, spot: Spot) -> tuple[Conditions, str, list[str]]:
+    """세션 구간(04~11시) 중 가장 위험한 시점의 조건."""
     times = marine.parse_times(hourly)
-    indices = _daylight_indices(times, day)
+    low, high = SESSION_WINDOW
+    indices = [i for i, t in enumerate(times) if t.date() == day and low <= t.hour <= high]
     if not indices:
         raise MarineError(f"{day} 예보가 응답 범위 밖입니다. --date 를 확인하세요.")
 
-    ranking = {"양호": 0, "주의": 1, "위험": 2, "매우위험": 3, "판단불가": -1}
     best_index, best = indices[0], None
-
     for i in indices:
         cond = marine.conditions_at(hourly, i)
-        level, reasons = marine.risk(cond, spot.exposed_from)
-        key = (ranking[level], cond.wave_height or 0)
+        level, _ = marine.risk(cond, spot.exposed_from)
+        key = (RISK_ORDER[level], cond.wave_height or 0)
         if best is None or key > best:
             best, best_index = key, i
 
@@ -65,48 +87,112 @@ def next_saturday(today: dt.date) -> dt.date:
     return today + dt.timedelta(days=(SATURDAY - today.weekday()) % 7 or 7)
 
 
-def _fmt_tides(extremes: list[Extreme]) -> str:
-    if not extremes:
-        return "물때: 조위 데이터 없음"
+def build(spot: Spot, day: dt.date, hourly: dict, with_saturday: bool = True) -> Brief:
+    times = marine.parse_times(hourly)
+    start_index = _index_at(times, day, SESSION_START_HOUR)
+    if start_index is None:
+        raise MarineError(f"{day} 예보가 응답 범위 밖입니다. --date 를 확인하세요.")
+
+    start = marine.conditions_at(hourly, start_index)
+    worst, level, reasons = worst_in_session(hourly, day, spot)
+    sunrise, _ = marine.sun_times(hourly, day)
+
+    saturday = None
+    if with_saturday and day.weekday() != SATURDAY:
+        sat_day = next_saturday(day)
+        try:
+            sat_cond, sat_level, _ = worst_in_session(hourly, sat_day, spot)
+            saturday = (sat_day, sat_level, sat_cond)
+        except MarineError:
+            pass  # 예보 범위를 벗어나면 토요일 줄만 생략한다.
+
+    return Brief(
+        spot=spot,
+        day=day,
+        start=start,
+        worst=worst,
+        level=level,
+        reasons=reasons,
+        extremes=marine.tide_extremes(hourly, day),
+        tide=marine.tide_state(hourly, times[start_index]),
+        sunrise=sunrise,
+        saturday=saturday,
+    )
+
+
+def _tide_line(b: Brief) -> str:
+    if not b.extremes:
+        return "조위 데이터 없음"
     parts = [
         f"{'만조' if e.kind == 'high' else '간조'} {e.time:%H:%M}({e.height_m:+.1f}m)"
-        for e in sorted(extremes, key=lambda e: e.time)
+        for e in b.extremes
     ]
     return " ".join(parts)
 
 
-def format_full(spot: Spot, day: dt.date, cond: Conditions, level: str,
-                reasons: list[str], extremes: list[Extreme],
-                saturday: tuple[dt.date, str, Conditions] | None) -> str:
+def format_full(b: Brief) -> str:
     """화면/메일용 상세 브리핑."""
+    day_label = f"{b.day:%-m월 %-d일}({WEEKDAY_KO[b.day.weekday()]})"
     lines = [
-        f"■ {spot.name} — {day:%-m월 %-d일}({WEEKDAY_KO[day.weekday()]}) 갯바위 브리핑",
+        f"■ {b.spot.name} — {day_label} 새벽 브리핑",
         "",
-        f"  위험도   {level}" + (f"  ({', '.join(reasons)})" if reasons else ""),
+        f"  위험도   {b.level}" + (f"  ({', '.join(b.reasons)})" if b.reasons else ""),
     ]
 
-    if cond.wave_height is not None:
+    if b.start.wave_height is not None:
         lines.append(
-            f"  파고     유의 {cond.wave_height:.1f}m / 예상 최대 세트 {cond.max_set_m:.1f}m"
+            f"  파고     {SESSION_START_HOUR:02d}시 유의 {b.start.wave_height:.1f}m"
+            f" / 예상 최대 세트 {b.start.max_set_m:.1f}m"
         )
-    if cond.swell_height is not None:
-        period = f" · {cond.swell_period:.0f}초" if cond.swell_period else ""
+        # 세션 중 눈에 띄게 더 나빠지는 시점이 있을 때만 덧붙인다.
+        # 파고가 내내 평평하면 같은 값을 두 번 적을 뿐이다.
+        if (
+            b.worst.time.hour != SESSION_START_HOUR
+            and b.worst.wave_height is not None
+            and b.worst.wave_height >= b.start.wave_height + 0.1
+        ):
+            lines.append(
+                f"           {b.worst.time:%H시} 최악 {b.worst.wave_height:.1f}m"
+                f" (세트 {b.worst.max_set_m:.1f}m)"
+            )
+    if b.start.swell_height is not None:
+        period = f" · {b.start.swell_period:.0f}초" if b.start.swell_period else ""
         lines.append(
-            f"  너울     {cond.swell_height:.1f}m{period} · {compass(cond.swell_direction)}"
+            f"  너울     {b.start.swell_height:.1f}m{period} · {compass(b.start.swell_direction)}"
         )
-    if cond.wind_speed is not None:
-        gust = f" (돌풍 {cond.wind_gust:.0f})" if cond.wind_gust else ""
+    if b.start.wind_speed is not None:
+        gust = f" (돌풍 {b.start.wind_gust:.0f})" if b.start.wind_gust else ""
         lines.append(
-            f"  바람     {compass(cond.wind_direction)} {cond.wind_speed:.0f}km/h{gust}"
+            f"  바람     {compass(b.start.wind_direction)} {b.start.wind_speed:.0f}km/h{gust}"
         )
 
-    lines += [f"  물때     {_fmt_tides(extremes)}", f"  기준시각 {cond.time:%H:%M} (최악 조건 시점)"]
+    if b.tide:
+        nxt = b.tide.next_extreme
+        kind = "만조" if nxt.kind == "high" else "간조"
+        lines.append(
+            f"  물때     {SESSION_START_HOUR:02d}시 {b.tide.label} → {kind} {nxt.time:%H:%M}"
+        )
+    lines.append(f"           {_tide_line(b)}")
 
-    if spot.note:
-        lines.append(f"  참고     {spot.note}")
+    if b.sunrise:
+        dark = ""
+        if b.sunrise.hour > SESSION_START_HOUR or (
+            b.sunrise.hour == SESSION_START_HOUR and b.sunrise.minute > 0
+        ):
+            delta = int(
+                (b.sunrise - b.sunrise.replace(hour=SESSION_START_HOUR, minute=0)).total_seconds()
+                // 60
+            )
+            dark = f" (입수 후 {delta}분간 어두움)"
+        lines.append(f"  일출     {b.sunrise:%H:%M}{dark}")
 
-    if saturday:
-        sat_day, sat_level, sat_cond = saturday
+    if b.spot.note:
+        lines.append(f"  참고     {b.spot.note}")
+    if b.spot.access_check:
+        lines.append(f"  출입     {b.spot.access_check}")
+
+    if b.saturday:
+        sat_day, sat_level, sat_cond = b.saturday
         wave = f"{sat_cond.wave_height:.1f}m" if sat_cond.wave_height is not None else "?"
         lines += ["", f"  토요일({sat_day:%-m/%-d}) 전망: {sat_level} · 파고 {wave}"]
 
@@ -118,61 +204,47 @@ def format_full(spot: Spot, day: dt.date, cond: Conditions, level: str,
     return "\n".join(lines)
 
 
-def format_compact(spot: Spot, day: dt.date, cond: Conditions, level: str,
-                   reasons: list[str], extremes: list[Extreme],
-                   saturday: tuple[dt.date, str, Conditions] | None) -> str:
+def format_compact(b: Brief) -> str:
     """카카오톡용 요약. 텍스트 템플릿 200자 제한에 맞춘다."""
-    head = f"[{day:%-m/%-d}({WEEKDAY_KO[day.weekday()]})] {spot.name.split(' (')[0]}"
+    short_name = b.spot.name.split(" (")[0]
+    parts = [f"[{b.day:%-m/%-d}({WEEKDAY_KO[b.day.weekday()]})] {short_name}"]
 
-    wave = "파고 -"
-    if cond.wave_height is not None:
-        wave = f"파고 {cond.wave_height:.1f}m(세트 {cond.max_set_m:.1f}m)"
+    wave = f"{SESSION_START_HOUR:02d}시 파고 -"
+    if b.start.wave_height is not None:
+        wave = (f"{SESSION_START_HOUR:02d}시 파고 {b.start.wave_height:.1f}m"
+                f"(세트 {b.start.max_set_m:.1f}m)")
+    if b.start.swell_height is not None:
+        period = f"/{b.start.swell_period:.0f}s" if b.start.swell_period else ""
+        wave += f" 너울 {b.start.swell_height:.1f}m{period} {compass(b.start.swell_direction)}"
+    parts.append(wave)
 
-    swell = ""
-    if cond.swell_height is not None:
-        period = f"/{cond.swell_period:.0f}s" if cond.swell_period else ""
-        swell = f" 너울 {cond.swell_height:.1f}m{period} {compass(cond.swell_direction)}"
+    if b.tide:
+        nxt = b.tide.next_extreme
+        parts.append(f"물때 {b.tide.label}, {'만조' if nxt.kind == 'high' else '간조'} {nxt.time:%H:%M}")
 
-    tides = " ".join(
-        f"{'만' if e.kind == 'high' else '간'}{e.time:%H:%M}"
-        for e in sorted(extremes, key=lambda e: e.time)
-    )
+    extras = []
+    if b.start.wind_speed is not None:
+        extras.append(f"바람 {compass(b.start.wind_direction)} {b.start.wind_speed:.0f}km/h")
+    if b.sunrise:
+        extras.append(f"일출 {b.sunrise:%H:%M}")
+    if extras:
+        parts.append(" · ".join(extras))
 
-    parts = [head, wave + swell]
-    if tides:
-        parts.append(f"물때 {tides}")
-    if cond.wind_speed is not None:
-        parts.append(f"바람 {compass(cond.wind_direction)} {cond.wind_speed:.0f}km/h")
+    parts.append(b.level + (f" · {b.reasons[0]}" if b.reasons else ""))
 
-    verdict = level + (f" · {reasons[0]}" if reasons else "")
-    parts.append(verdict)
-
-    if saturday:
-        sat_day, sat_level, sat_cond = saturday
+    if b.saturday:
+        sat_day, sat_level, sat_cond = b.saturday
         wave_txt = f"{sat_cond.wave_height:.1f}m" if sat_cond.wave_height is not None else "?"
         parts.append(f"토({sat_day:%-m/%-d}) {sat_level} {wave_txt}")
+
+    if b.spot.access_check:
+        parts.append(f"※{b.spot.access_check}")
 
     return "\n".join(parts)
 
 
-def build(spot: Spot, day: dt.date, hourly: dict, with_saturday: bool = True):
-    cond, level, reasons = worst_of_day(hourly, day, spot)
-    extremes = marine.tide_extremes(hourly, day)
-
-    saturday = None
-    if with_saturday and day.weekday() != SATURDAY:
-        sat_day = next_saturday(day)
-        try:
-            sat_cond, sat_level, _ = worst_of_day(hourly, sat_day, spot)
-            saturday = (sat_day, sat_level, sat_cond)
-        except MarineError:
-            pass  # 예보 범위를 벗어나면 토요일 줄만 생략한다.
-
-    return cond, level, reasons, extremes, saturday
-
-
 def main() -> int:
-    parser = argparse.ArgumentParser(description="갯바위 낚시 아침 브리핑")
+    parser = argparse.ArgumentParser(description="갯바위 낚시 새벽 브리핑")
     parser.add_argument("--spot", default=DEFAULT_SPOT,
                         help=f"포인트 키 (기본: {DEFAULT_SPOT}). 목록: {', '.join(SPOTS)}")
     parser.add_argument("--date", help="YYYY-MM-DD (기본: 오늘)")
@@ -186,20 +258,19 @@ def main() -> int:
 
     try:
         hourly = marine.fetch(spot.lat, spot.lon, TIMEZONE)
-        result = build(spot, day, hourly)
+        brief = build(spot, day, hourly)
     except MarineError as exc:
         print(f"[에러] {exc}", file=sys.stderr)
         return 1
 
-    compact = format_compact(spot, day, *result)
-    full = format_full(spot, day, *result)
-
-    print(compact if args.compact else full)
+    print(format_compact(brief) if args.compact else format_full(brief))
 
     if args.send:
+        from spots import BEECROFT_URL
         try:
             from kakao_notify import KakaoError, send
-            send(compact)
+            link = BEECROFT_URL if brief.spot.access_check else None
+            send(format_compact(brief), link=link, button_title="사격장 개방 확인")
         except ImportError:
             print("[에러] kakao_notify를 찾을 수 없습니다 (tools/kakao-notify 확인).",
                   file=sys.stderr)

@@ -84,12 +84,15 @@ def check_brief(spot_key: str) -> bool:
     try:
         hourly = marine.fetch(spot.lat, spot.lon, TIMEZONE)
         day = dt.datetime.now(ZoneInfo(TIMEZONE)).date()
-        result = surf_brief.build(spot, day, hourly)
+        brief = surf_brief.build(spot, day, hourly)
     except marine.MarineError as exc:
         print(f"{FAIL} {exc}")
         return False
 
-    compact = surf_brief.format_compact(spot, day, *result)
+    if brief.sunrise is None:
+        print(f"{WARN} 일출 시각을 받지 못했습니다 (브리핑에서 해당 줄만 빠집니다)")
+
+    compact = surf_brief.format_compact(brief)
     print(f"{OK} 요약본 {len(compact)}자 (카카오 제한 200자)\n")
     print("\n".join("       " + line for line in compact.splitlines()))
     if len(compact) > 200:
