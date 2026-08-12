@@ -1,0 +1,5 @@
+# 액세스/리프레시 토큰 — 절대 커밋 금지
+.kakao_token.json
+
+# REST API 키
+.env
