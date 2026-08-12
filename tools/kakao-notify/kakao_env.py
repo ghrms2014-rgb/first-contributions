@@ -58,7 +58,11 @@ def get_redirect_uri() -> str:
 
 
 def save_tokens(payload: dict) -> None:
-    """토큰 응답을 만료 시각과 함께 저장한다. 파일 권한은 소유자 전용(0600)."""
+    """토큰 응답을 만료 시각과 함께 저장한다. 파일 권한은 소유자 전용(0600).
+
+    파일에 쓸 수 없는 환경(읽기 전용 컨테이너 등)에서는 조용히 건너뛴다.
+    리프레시 토큰만 있으면 매번 다시 발급받을 수 있으므로 동작에는 지장이 없다.
+    """
     now = int(time.time())
     stored = read_tokens() or {}
 
@@ -72,14 +76,37 @@ def save_tokens(payload: dict) -> None:
             payload.get("refresh_token_expires_in", 5183999)
         )
 
-    TOKEN_PATH.write_text(json.dumps(stored, indent=2), encoding="utf-8")
-    TOKEN_PATH.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    try:
+        TOKEN_PATH.write_text(json.dumps(stored, indent=2), encoding="utf-8")
+        TOKEN_PATH.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        pass
 
 
 def read_tokens() -> dict | None:
+    """저장된 토큰을 읽는다.
+
+    환경변수 KAKAO_REFRESH_TOKEN이 있으면 그쪽을 우선한다. 로컬에서 한 번
+    인증한 뒤 토큰만 서버/클라우드에 넘겨 쓰는 용도다(파일을 옮길 필요 없음).
+    """
+    load_env()
+
+    env_refresh = os.environ.get("KAKAO_REFRESH_TOKEN", "").strip()
+    if env_refresh:
+        # 액세스 토큰 캐시가 남아 있으면 재활용하고, 없으면 갱신하도록 둔다.
+        cached = _read_token_file() or {}
+        if cached.get("refresh_token") != env_refresh:
+            cached = {}
+        cached["refresh_token"] = env_refresh
+        return cached
+
+    return _read_token_file()
+
+
+def _read_token_file() -> dict | None:
     if not TOKEN_PATH.exists():
         return None
     try:
         return json.loads(TOKEN_PATH.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, OSError):
         return None
