@@ -34,10 +34,16 @@ BEECROFT_URL = "https://www.defence.gov.au/about/locations-property/beecroft-wea
 
 SPOTS: dict[str, Spot] = {
     # --- 저비스 베이 / 비크로프트 반도 ---
+    # 좌표는 윌리웨더 지도 스크린샷의 선택 마커를 커라롱(-35.0122, 150.8264)
+    # 기준으로 환산한 값이다. 화면 축척에서 역산했으므로 500m~1km 오차가 있을
+    # 수 있다. 실제 진입 지점 좌표를 받으면 이 줄만 고치면 된다.
+    # 반도 북동쪽 모서리라 N~SE 너울에는 열려 있고, NSW 주력 너울인 S 계열은
+    # 반도 몸통에 가려진다. 남너울 때 상대적으로 안전한 자리라는 뜻인데,
+    # 지도상 지형에서 추정한 것이므로 현장 감각과 다르면 알려달라.
     "little_beecroft": Spot(
-        "little_beecroft", "리틀 비크로프트 헤드", -35.0270, 150.8590,
-        exposed_from=(20, 190),
-        note="절벽 아래 갯바위. 너울 올라오면 퇴로가 짧다",
+        "little_beecroft", "리틀 비크로프트 헤드", -35.0064, 150.8474,
+        exposed_from=(10, 150),
+        note="절벽 아래 갯바위. 너울 올라오면 퇴로가 짧다. S너울은 반도에 가림",
         access_check=BEECROFT_ACCESS,
     ),
     "beecroft_head": Spot(

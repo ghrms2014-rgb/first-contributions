@@ -13,13 +13,20 @@ from __future__ import annotations
 import secrets
 import sys
 import threading
+import time
 import urllib.parse
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import requests
 
-from kakao_env import AUTH_HOST, get_redirect_uri, get_rest_api_key, save_tokens
+from kakao_env import (
+    AUTH_HOST,
+    get_redirect_uri,
+    get_rest_api_key,
+    read_tokens,
+    save_tokens,
+)
 
 SCOPE = "talk_message"
 
@@ -123,10 +130,41 @@ def main() -> int:
         return 1
 
     save_tokens(response.json())
-    print("\n완료. 이제 이렇게 쓰시면 됩니다:\n")
+    print("\n인증 완료. 바로 써보시려면:\n")
     print('  python3 kakao_notify.py "첫 메시지"')
+    print_env_block()
+    return 0
+
+
+def print_env_block() -> int:
+    """클라우드/서버에 등록할 환경변수를 그대로 출력한다.
+
+    토큰 파일에서 값을 눈으로 찾아 복사하는 수고를 없애려는 것뿐이다.
+    """
+    tokens = read_tokens()
+    if not tokens or not tokens.get("refresh_token"):
+        print(
+            "저장된 토큰이 없습니다. 먼저 python3 kakao_auth.py 를 실행하세요.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print("\n" + "=" * 68)
+    print("아래 두 줄을 환경변수로 등록하세요 (그대로 복사).")
+    print("=" * 68)
+    print(f"KAKAO_REST_API_KEY={get_rest_api_key()}")
+    print(f"KAKAO_REFRESH_TOKEN={tokens['refresh_token']}")
+    print("=" * 68)
+
+    expires_at = tokens.get("refresh_token_expires_at")
+    if expires_at:
+        remaining = (expires_at - time.time()) / 86400
+        print(f"리프레시 토큰 유효기간: 약 {remaining:.0f}일 (쓸 때마다 자동 연장)")
+    print("이 값은 비밀번호와 같습니다. 채팅이나 저장소에 붙여넣지 마세요.")
     return 0
 
 
 if __name__ == "__main__":
+    if "--show-env" in sys.argv:
+        raise SystemExit(print_env_block())
     raise SystemExit(main())
