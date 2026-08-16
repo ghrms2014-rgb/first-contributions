@@ -308,13 +308,36 @@ def _spot_block(label: str, b: Brief) -> list[str]:
     return lines
 
 
+def _purpose(lead: int) -> tuple[str, str]:
+    """며칠 앞선 예보인지에 따라 브리핑의 성격과 안내 문구를 정한다.
+
+    같은 내용이라도 5일 전과 3일 전은 신뢰도가 다르다. 월요일 브리핑을 보고
+    결정해버리면 안 되고, 수요일 브리핑을 받고도 또 기다릴 필요는 없다.
+    """
+    if lead >= 5:
+        return "계획용", (
+            f"{lead}일 앞선 예보입니다. 경향만 보시고, 갈지 말지는 수요일 브리핑에서 정하세요."
+        )
+    if lead >= 3:
+        return "결정용", (
+            f"{lead}일 앞선 예보입니다. 이 정도면 결정하실 만합니다. "
+            "다만 큰 저기압이 오면 하루 만에 바뀌니 금요일 밤 한 번 더 보세요."
+        )
+    if lead >= 1:
+        return "직전 확인", (
+            f"{lead}일 앞선 예보라 신뢰도가 높습니다. 출발 전 현장 상황만 확인하세요."
+        )
+    return "당일", "당일 예보입니다. 현장 판단을 우선하세요."
+
+
 def format_weekly(pairs: list[tuple[str, Brief]], sent_on: dt.date) -> str:
     """월요일에 보내는 토요일 비교 브리핑. 메일용이라 길이 제한이 없다."""
     saturday = pairs[0][1].day
     lead = (saturday - sent_on).days
 
+    purpose, advice = _purpose(lead)
     lines = [
-        f"토요일 {saturday:%-m월 %-d일} 갯바위 브리핑 — 남/북 비교",
+        f"토요일 {saturday:%-m월 %-d일} 갯바위 브리핑 — 남/북 비교  [{purpose}]",
         f"({sent_on:%-m/%-d}({WEEKDAY_KO[sent_on.weekday()]}) 발신 · {lead}일 앞선 예보)",
         "",
     ]
@@ -344,7 +367,7 @@ def format_weekly(pairs: list[tuple[str, Brief]], sent_on: dt.date) -> str:
 
     lines += [
         "",
-        f"  ※ {lead}일 앞선 너울 예보라 오차가 큽니다. 금요일에 다시 확인하세요.",
+        f"  ※ {advice}",
         "     물때 높이는 평균해수면 기준이라, 해도기준면을 쓰는 윌리웨더보다",
         "     낮은 숫자로 나옵니다. 시각과 조차를 보세요.",
         "     현장에서는 최소 15분간 세트 주기를 직접 보고 판단하시고,",
