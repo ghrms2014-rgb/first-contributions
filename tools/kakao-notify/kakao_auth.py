@@ -27,10 +27,12 @@ import requests
 
 from kakao_env import (
     AUTH_HOST,
+    get_client_secret,
     get_redirect_uri,
     get_rest_api_key,
     read_tokens,
     save_tokens,
+    token_request_data,
 )
 
 SCOPE = "talk_message"
@@ -89,19 +91,24 @@ def _authorize_url(rest_api_key: str, redirect_uri: str, state: str) -> str:
     )
 
 
-def _exchange(rest_api_key: str, redirect_uri: str, code: str) -> int:
+def _exchange(redirect_uri: str, code: str) -> int:
     response = requests.post(
         f"{AUTH_HOST}/oauth/token",
-        data={
-            "grant_type": "authorization_code",
-            "client_id": rest_api_key,
-            "redirect_uri": redirect_uri,
-            "code": code,
-        },
+        data=token_request_data(
+            grant_type="authorization_code",
+            redirect_uri=redirect_uri,
+            code=code,
+        ),
         timeout=10,
     )
     if response.status_code != 200:
         print(f"[에러] 토큰 발급 실패 ({response.status_code}): {response.text}", file=sys.stderr)
+        if "client_secret" in response.text or "KOE010" in response.text:
+            print(
+                "       이 앱은 Client Secret이 켜져 있습니다.\n"
+                "       콘솔에서 값을 복사해 .env에 KAKAO_CLIENT_SECRET=... 로 넣어주세요.",
+                file=sys.stderr,
+            )
         return 1
     save_tokens(response.json())
     return 0
@@ -162,7 +169,7 @@ def manual_flow() -> int:
             print("[에러] state 값이 일치하지 않습니다. 인증을 중단합니다.", file=sys.stderr)
             return 1
 
-    if _exchange(rest_api_key, redirect_uri, code) != 0:
+    if _exchange(redirect_uri, code) != 0:
         return 1
 
     print("\n인증 완료.")
@@ -206,7 +213,7 @@ def main() -> int:
         print("[에러] state 값이 일치하지 않습니다. 인증을 중단합니다.", file=sys.stderr)
         return 1
 
-    if _exchange(rest_api_key, redirect_uri, _result["code"]) != 0:
+    if _exchange(redirect_uri, _result["code"]) != 0:
         return 1
 
     print("\n인증 완료. 바로 써보시려면:\n")
@@ -228,11 +235,14 @@ def print_env_block() -> int:
         )
         return 1
 
+    secret = get_client_secret()
     print("\n" + "=" * 68)
-    print("아래 두 줄을 환경변수로 등록하세요 (그대로 복사).")
+    print(f"아래 {'세' if secret else '두'} 줄을 환경변수로 등록하세요 (그대로 복사).")
     print("=" * 68)
     print(f"KAKAO_REST_API_KEY={get_rest_api_key()}")
     print(f"KAKAO_REFRESH_TOKEN={tokens['refresh_token']}")
+    if secret:
+        print(f"KAKAO_CLIENT_SECRET={secret}")
     print("=" * 68)
 
     expires_at = tokens.get("refresh_token_expires_at")

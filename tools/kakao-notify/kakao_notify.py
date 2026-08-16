@@ -25,9 +25,9 @@ from kakao_env import (
     AUTH_HOST,
     TEXT_LIMIT,
     TOKEN_PATH,
-    get_rest_api_key,
     read_tokens,
     save_tokens,
+    token_request_data,
 )
 
 # 만료 직전 요청이 실패하지 않도록 여유를 둔다.
@@ -41,11 +41,10 @@ class KakaoError(RuntimeError):
 def _refresh(refresh_token: str) -> str:
     response = requests.post(
         f"{AUTH_HOST}/oauth/token",
-        data={
-            "grant_type": "refresh_token",
-            "client_id": get_rest_api_key(),
-            "refresh_token": refresh_token,
-        },
+        data=token_request_data(
+            grant_type="refresh_token",
+            refresh_token=refresh_token,
+        ),
         timeout=10,
     )
     if response.status_code != 200:

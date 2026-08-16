@@ -57,6 +57,25 @@ def get_redirect_uri() -> str:
     return os.environ.get("KAKAO_REDIRECT_URI", "").strip() or DEFAULT_REDIRECT_URI
 
 
+def get_client_secret() -> str:
+    """Client Secret. 안 쓰는 앱이면 빈 문자열.
+
+    카카오는 Client Secret을 켜면 토큰 발급·갱신 요청에 이 값을 요구한다.
+    최근 생성한 앱은 기본으로 켜져 있는 경우가 있어, 값이 있을 때만 실어 보낸다.
+    """
+    load_env()
+    return os.environ.get("KAKAO_CLIENT_SECRET", "").strip()
+
+
+def token_request_data(**extra: str) -> dict:
+    """토큰 엔드포인트 공통 파라미터. Client Secret은 설정된 경우에만 넣는다."""
+    data = {"client_id": get_rest_api_key(), **extra}
+    secret = get_client_secret()
+    if secret:
+        data["client_secret"] = secret
+    return data
+
+
 def save_tokens(payload: dict) -> None:
     """토큰 응답을 만료 시각과 함께 저장한다. 파일 권한은 소유자 전용(0600).
 
