@@ -114,18 +114,56 @@ KAKAO_REFRESH_TOKEN=RT-xxxx...
 
 이 두 줄을 실행 환경의 **환경변수**로 등록하면 됩니다.
 
-- **Claude Code 클라우드**: 환경 설정 화면의 환경변수(Environment variables)
-  항목에 이름/값으로 각각 추가
 - **일반 서버**: `~/.bashrc`에 `export KAKAO_REFRESH_TOKEN=...` 또는
   systemd 유닛의 `Environment=` 항목
 - **로컬에서만 쓸 때**: 등록할 필요 없습니다. `.kakao_token.json`이 알아서 쓰입니다
+- **Claude Code 클라우드**: 아래 주의사항을 먼저 읽어주세요
 
 `kakao_env.py`는 환경변수를 파일보다 우선해서 읽습니다. 즉 환경변수만 설정되어
 있으면 토큰 파일 없이도 동작합니다.
 
-> 리프레시 토큰은 비밀번호와 같습니다. 채팅창이나 저장소에 붙여넣지 마세요.
+#### Claude Code 클라우드 환경변수에 넣기 전에
+
+[공식 문서](https://code.claude.com/docs/en/cloud-environments)는 클라우드 환경의
+환경변수 항목에 **자격증명을 넣지 말라고 명시**하고 있습니다.
+
+> Anyone who uses the environment can read the values, and cloud environments have
+> no dedicated secrets store, so don't add API keys or other credentials.
+
+리프레시 토큰은 자격증명입니다. 별도의 비밀 저장소가 없으므로, 넣는다면 이
+경고를 알고 넣는 것입니다.
+
+**이 토큰에 한정한 실제 위험도**는 낮은 편입니다. 권한이 `talk_message` 하나뿐이라
+유출돼도 할 수 있는 일이 **본인에게 카톡을 보내는 것**뿐입니다. 대화를 읽거나,
+친구에게 보내거나, 계정 정보를 가져갈 수 없습니다. 개인 환경(조직 공유 환경이
+아닌)이라면 값을 읽을 수 있는 사람도 본인뿐입니다.
+
+그래도 자격증명을 두고 싶지 않으시면 **로컬 cron**으로 돌리세요. 토큰이 컴퓨터
+밖으로 나가지 않습니다. 대신 실행 시각에 컴퓨터가 켜져 있어야 합니다.
+
+> 어느 쪽이든 리프레시 토큰을 **채팅창이나 저장소에 붙여넣지 마세요.**
 > 유출됐다면 [카카오 계정 → 연결된 서비스 관리](https://accounts.kakao.com)에서
 > 앱 연결을 끊으면 즉시 무효화됩니다.
+
+#### 등록 위치 (claude.ai/code)
+
+1. [claude.ai/code](https://claude.ai/code) 접속
+2. **메시지 입력창 바로 위 줄**에 환경 이름이 적힌 클라우드 버튼이 있습니다
+   (처음이면 `Default`)
+3. 그 버튼을 누르면 메뉴가 열립니다. **Cloud** 섹션의 환경 위에 마우스를 올리면
+   오른쪽에 **톱니바퀴 아이콘**이 나타납니다. 그걸 누르세요
+4. 다이얼로그에 네 가지가 있습니다 — 이름, **Network access**,
+   **Environment variables**, Setup script
+5. **Environment variables** 칸에 `.env` 형식으로 한 줄에 하나씩 붙여넣습니다
+
+   ```
+   KAKAO_REST_API_KEY=abc123...
+   KAKAO_REFRESH_TOKEN=RT-xxxx...
+   ```
+
+6. 같은 다이얼로그의 **Network access**를 `Trusted` → **`Custom`** 으로 바꾸고
+   필요한 도메인을 추가합니다. 기본값 `Trusted`는 패키지 저장소와 GitHub 등만
+   열려 있어서 카카오·기상 API는 막힙니다
 
 ### 사용
 
