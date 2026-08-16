@@ -54,6 +54,7 @@ class Brief:
     tide: TideState | None     # 입수 시각의 들물/썰물
     sunrise: dt.datetime | None
     saturday: tuple[dt.date, str, Conditions] | None
+    missing: list[str]        # 받지 못한 보조 항목 (예: 바람, 일출)
 
 
 def _index_at(times: list[dt.datetime], day: dt.date, hour: int) -> int | None:
@@ -118,17 +119,28 @@ def build(spot: Spot, day: dt.date, hourly: dict, with_saturday: bool = True) ->
         tide=marine.tide_state(hourly, times[start_index]),
         sunrise=sunrise,
         saturday=saturday,
+        missing=list(hourly.get("_missing") or []),
     )
 
 
 def _tide_line(b: Brief) -> str:
+    """만조·간조 시각과 그날 조차.
+
+    절대 조위(+0.5m 같은 값)는 평균해수면 기준이라 해도기준면을 쓰는 윌리웨더와
+    숫자가 달라 혼란만 준다. 시각과 조차가 실제로 쓰이는 값이다.
+    """
     if not b.extremes:
         return "조위 데이터 없음"
     parts = [
-        f"{'만조' if e.kind == 'high' else '간조'} {e.time:%H:%M}({e.height_m:+.1f}m)"
+        f"{'만조' if e.kind == 'high' else '간조'} {e.time:%H:%M}"
         for e in b.extremes
     ]
-    return " ".join(parts)
+    line = " ".join(parts)
+    span = marine.tidal_range(b.extremes)
+    if span is not None:
+        tag = "사리" if span >= 1.0 else ("조금" if span <= 0.5 else "중간물")
+        line += f" · 조차 {span:.1f}m ({tag})"
+    return line
 
 
 def format_full(b: Brief) -> str:
@@ -187,6 +199,8 @@ def format_full(b: Brief) -> str:
             dark = f" (입수 후 {delta}분간 어두움)"
         lines.append(f"  일출     {b.sunrise:%H:%M}{dark}")
 
+    if b.missing:
+        lines.append(f"  누락     {'·'.join(b.missing)} 정보 없음 (기상 서버 응답 없음)")
     if b.spot.note:
         lines.append(f"  참고     {b.spot.note}")
     if b.spot.access_check:
@@ -289,6 +303,8 @@ def _spot_block(label: str, b: Brief) -> list[str]:
         lines.append(f"     일출    {b.sunrise:%H:%M}")
     if b.spot.access_check:
         lines.append(f"     출입    {b.spot.access_check}")
+    if b.missing:
+        lines.append(f"     ⚠ {'·'.join(b.missing)} 정보를 받지 못했습니다 (기상 서버 응답 없음)")
     return lines
 
 
@@ -329,6 +345,8 @@ def format_weekly(pairs: list[tuple[str, Brief]], sent_on: dt.date) -> str:
     lines += [
         "",
         f"  ※ {lead}일 앞선 너울 예보라 오차가 큽니다. 금요일에 다시 확인하세요.",
+        "     물때 높이는 평균해수면 기준이라, 해도기준면을 쓰는 윌리웨더보다",
+        "     낮은 숫자로 나옵니다. 시각과 조차를 보세요.",
         "     현장에서는 최소 15분간 세트 주기를 직접 보고 판단하시고,",
         "     구명조끼 착용은 예보와 무관하게 결정하세요.",
     ]

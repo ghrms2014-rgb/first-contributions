@@ -9,6 +9,7 @@ sea_level_height_msl(평균해수면 기준 조위) 시계열에서 극값을 �
 from __future__ import annotations
 
 import datetime as dt
+import time
 from dataclasses import dataclass
 
 import requests
@@ -75,17 +76,39 @@ class MarineError(RuntimeError):
     pass
 
 
+TIMEOUT_SEC = 45
+RETRIES = 3
+
+
 def _get(url: str, params: dict) -> dict:
-    try:
-        response = requests.get(url, params=params, timeout=20)
-    except requests.RequestException as exc:
-        raise MarineError(
-            f"{url} 요청 실패: {exc}\n"
-            "네트워크 정책에서 이 도메인이 허용됐는지 확인하세요 (README 참고)."
-        ) from exc
-    if response.status_code != 200:
-        raise MarineError(f"{url} 응답 오류 ({response.status_code}): {response.text[:300]}")
-    return response.json()
+    """Open-Meteo 호출. 일시적 실패는 재시도한다.
+
+    주 1회 무인 실행이라 순간적인 타임아웃 한 번에 브리핑이 통째로 날아가면
+    안 된다. 5xx와 네트워크 오류만 재시도하고, 4xx는 파라미터가 틀린 것이므로
+    재시도해도 같은 결과라 즉시 올린다.
+    """
+    last = ""
+    for attempt in range(RETRIES):
+        if attempt:
+            time.sleep(2 ** attempt)  # 2초, 4초
+        try:
+            response = requests.get(url, params=params, timeout=TIMEOUT_SEC)
+        except requests.RequestException as exc:
+            last = f"{type(exc).__name__}: {exc}"
+            continue
+
+        if response.status_code == 200:
+            return response.json()
+        if response.status_code < 500:
+            raise MarineError(
+                f"{url} 응답 오류 ({response.status_code}): {response.text[:300]}"
+            )
+        last = f"HTTP {response.status_code}"
+
+    raise MarineError(
+        f"{url} 요청이 {RETRIES}번 모두 실패했습니다 — {last}\n"
+        "네트워크 정책에서 이 도메인이 허용됐는지 확인하세요 (README 참고)."
+    )
 
 
 def fetch(lat: float, lon: float, timezone: str, days: int = 7) -> dict:
@@ -96,26 +119,50 @@ def fetch(lat: float, lon: float, timezone: str, days: int = 7) -> dict:
     """
     common = {"latitude": lat, "longitude": lon, "timezone": timezone, "forecast_days": days}
 
+    # 파고·너울·조위가 본체다. 이게 없으면 브리핑이 성립하지 않는다.
     marine = _get(MARINE_URL, {**common, "hourly": ",".join(MARINE_VARS)})
-    wind = _get(FORECAST_URL, {
-        **common,
-        "hourly": ",".join(WIND_VARS),
-        "daily": "sunrise,sunset",
-    })
 
     hourly = dict(marine.get("hourly", {}))
+    if not hourly.get("time"):
+        raise MarineError("응답에 시간축이 없습니다. Open-Meteo 응답 형식이 바뀌었을 수 있습니다.")
+
+    # 바람과 일출은 보조 정보다. forecast 엔드포인트가 불안정한 편이라, 여기서
+    # 실패했다고 파고·물때까지 못 받는 브리핑을 내보내지는 않는다.
+    hourly["_missing"] = []
+    try:
+        wind = _get(FORECAST_URL, {
+            **common,
+            "hourly": ",".join(WIND_VARS),
+            "daily": "sunrise,sunset",
+        })
+    except MarineError as exc:
+        hourly["_missing"] = ["바람", "일출"]
+        hourly["_missing_reason"] = str(exc).splitlines()[0]
+        hourly["_sunrise"] = []
+        hourly["_sunset"] = []
+        return hourly
+
     for key, values in wind.get("hourly", {}).items():
         if key != "time":
             hourly[key] = values
-
-    if not hourly.get("time"):
-        raise MarineError("응답에 시간축이 없습니다. Open-Meteo 응답 형식이 바뀌었을 수 있습니다.")
 
     daily = wind.get("daily") or {}
     hourly["_sunrise"] = daily.get("sunrise") or []
     hourly["_sunset"] = daily.get("sunset") or []
 
     return hourly
+
+
+def tidal_range(extremes: list[Extreme]) -> float | None:
+    """그날의 조차. 사리(큰물)인지 조금인지 판단하는 값이다.
+
+    갯바위에서는 절대 조위보다 이쪽이 실용적이다. 조차가 크면 만조 때 자리가
+    더 깊이 잠기고 물살도 세진다.
+    """
+    if len(extremes) < 2:
+        return None
+    heights = [e.height_m for e in extremes]
+    return round(max(heights) - min(heights), 2)
 
 
 def sun_times(hourly: dict, day: dt.date) -> tuple[dt.datetime | None, dt.datetime | None]:
