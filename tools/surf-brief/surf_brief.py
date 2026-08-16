@@ -28,6 +28,7 @@ from spots import (
     SESSION_WINDOW,
     SPOTS,
     TIMEZONE,
+    WEEKLY_SPOTS,
     Spot,
     get_spot,
 )
@@ -243,6 +244,108 @@ def format_compact(b: Brief) -> str:
     return "\n".join(parts)
 
 
+def _spot_block(label: str, b: Brief) -> list[str]:
+    """주간 비교표의 한 지점 블록."""
+    lines = [f"  ── {label}: {b.spot.name}", f"     위험도  {b.level}"]
+    if b.reasons:
+        lines.append(f"             {', '.join(b.reasons)}")
+
+    if b.start.wave_height is not None:
+        lines.append(
+            f"     파고    {SESSION_START_HOUR:02d}시 {b.start.wave_height:.1f}m"
+            f" · 최대 세트 {b.start.max_set_m:.1f}m"
+        )
+        if (
+            b.worst.time.hour != SESSION_START_HOUR
+            and b.worst.wave_height is not None
+            and b.worst.wave_height >= b.start.wave_height + 0.1
+        ):
+            lines.append(
+                f"             {b.worst.time:%H시}에 {b.worst.wave_height:.1f}m까지"
+                f" (세트 {b.worst.max_set_m:.1f}m)"
+            )
+    if b.start.swell_height is not None:
+        period = f" · {b.start.swell_period:.0f}초" if b.start.swell_period else ""
+        lines.append(
+            f"     너울    {b.start.swell_height:.1f}m{period}"
+            f" · {compass(b.start.swell_direction)}"
+        )
+    if b.start.wind_speed is not None:
+        gust = f" (돌풍 {b.start.wind_gust:.0f})" if b.start.wind_gust else ""
+        lines.append(
+            f"     바람    {compass(b.start.wind_direction)}"
+            f" {b.start.wind_speed:.0f}km/h{gust}"
+        )
+    if b.tide:
+        nxt = b.tide.next_extreme
+        kind = "만조" if nxt.kind == "high" else "간조"
+        lines.append(
+            f"     물때    {SESSION_START_HOUR:02d}시 {b.tide.label}"
+            f" → {kind} {nxt.time:%H:%M}"
+        )
+    if b.extremes:
+        lines.append(f"             {_tide_line(b)}")
+    if b.sunrise:
+        lines.append(f"     일출    {b.sunrise:%H:%M}")
+    if b.spot.access_check:
+        lines.append(f"     출입    {b.spot.access_check}")
+    return lines
+
+
+def format_weekly(pairs: list[tuple[str, Brief]], sent_on: dt.date) -> str:
+    """월요일에 보내는 토요일 비교 브리핑. 메일용이라 길이 제한이 없다."""
+    saturday = pairs[0][1].day
+    lead = (saturday - sent_on).days
+
+    lines = [
+        f"토요일 {saturday:%-m월 %-d일} 갯바위 브리핑 — 남/북 비교",
+        f"({sent_on:%-m/%-d}({WEEKDAY_KO[sent_on.weekday()]}) 발신 · {lead}일 앞선 예보)",
+        "",
+    ]
+
+    for label, brief in pairs:
+        lines += _spot_block(label, brief)
+        lines.append("")
+
+    # 등급이 같으면 파고로 가른다. 둘 다 같으면 우열을 말하지 않는다.
+    ranked = sorted(pairs, key=lambda p: (RISK_ORDER[p[1].level], p[1].start.wave_height or 0))
+    best_label, best = ranked[0]
+    other_label, other = ranked[-1]
+
+    lines.append("  ── 판단")
+    if best.level == other.level and abs(
+        (best.start.wave_height or 0) - (other.start.wave_height or 0)
+    ) < 0.2:
+        lines.append(f"     두 곳 조건이 비슷합니다 (둘 다 {best.level}). 이동 거리로 고르세요.")
+    else:
+        lines.append(
+            f"     {best_label}({best.spot.name.split(' (')[0]})이 낫습니다"
+            f" — {best.level} vs {other_label} {other.level}"
+        )
+
+    if all(RISK_ORDER[b.level] >= RISK_ORDER["위험"] for _, b in pairs):
+        lines.append("     다만 양쪽 다 위험 등급입니다. 이번 주는 접는 쪽을 권합니다.")
+
+    lines += [
+        "",
+        f"  ※ {lead}일 앞선 너울 예보라 오차가 큽니다. 금요일에 다시 확인하세요.",
+        "     현장에서는 최소 15분간 세트 주기를 직접 보고 판단하시고,",
+        "     구명조끼 착용은 예보와 무관하게 결정하세요.",
+    ]
+    return "\n".join(lines)
+
+
+def build_weekly(sent_on: dt.date) -> list[tuple[str, Brief]]:
+    """다가오는 토요일 기준으로 등록된 비교 지점들의 브리핑을 만든다."""
+    saturday = sent_on if sent_on.weekday() == SATURDAY else next_saturday(sent_on)
+    pairs = []
+    for label, key in WEEKLY_SPOTS:
+        spot = get_spot(key)
+        hourly = marine.fetch(spot.lat, spot.lon, TIMEZONE)
+        pairs.append((label, build(spot, saturday, hourly, with_saturday=False)))
+    return pairs
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="갯바위 낚시 새벽 브리핑")
     parser.add_argument("--spot", default=DEFAULT_SPOT,
@@ -250,11 +353,23 @@ def main() -> int:
     parser.add_argument("--date", help="YYYY-MM-DD (기본: 오늘)")
     parser.add_argument("--send", action="store_true", help="카카오톡으로 전송")
     parser.add_argument("--compact", action="store_true", help="요약본을 화면에 출력")
+    parser.add_argument("--weekly", action="store_true",
+                        help="다가오는 토요일 기준 남/북 비교 브리핑 (메일용)")
     args = parser.parse_args()
 
-    spot = get_spot(args.spot)
     tz = ZoneInfo(TIMEZONE)
-    day = dt.date.fromisoformat(args.date) if args.date else dt.datetime.now(tz).date()
+    today = dt.date.fromisoformat(args.date) if args.date else dt.datetime.now(tz).date()
+
+    if args.weekly:
+        try:
+            print(format_weekly(build_weekly(today), today))
+        except MarineError as exc:
+            print(f"[에러] {exc}", file=sys.stderr)
+            return 1
+        return 0
+
+    spot = get_spot(args.spot)
+    day = today
 
     try:
         hourly = marine.fetch(spot.lat, spot.lon, TIMEZONE)
