@@ -1,0 +1,62 @@
+{
+  "brand": {
+    "title": "오늘의 AI 브리핑",
+    "tagline": "매일 아침, AI 업계에서 진짜 중요한 것만 3분 안에.",
+    "author": "ghrms2014",
+    "base_url": ""
+  },
+  "sources": [
+    {
+      "name": "구글뉴스 - 인공지능",
+      "url": "https://news.google.com/rss/search?q=%EC%9D%B8%EA%B3%B5%EC%A7%80%EB%8A%A5&hl=ko&gl=KR&ceid=KR:ko",
+      "enabled": true
+    },
+    {
+      "name": "구글뉴스 - 생성형 AI",
+      "url": "https://news.google.com/rss/search?q=%EC%83%9D%EC%84%B1%ED%98%95+AI&hl=ko&gl=KR&ceid=KR:ko",
+      "enabled": true
+    },
+    {
+      "name": "Hacker News",
+      "url": "https://hnrss.org/frontpage",
+      "enabled": true
+    },
+    {
+      "name": "TechCrunch",
+      "url": "https://techcrunch.com/feed/",
+      "enabled": true
+    }
+  ],
+  "keywords": {
+    "AI": 3,
+    "인공지능": 3,
+    "LLM": 3,
+    "OpenAI": 2,
+    "Anthropic": 2,
+    "Claude": 2,
+    "GPT": 2,
+    "Gemini": 2,
+    "오픈소스": 2,
+    "open source": 2,
+    "스타트업": 1,
+    "startup": 1,
+    "투자": 1,
+    "funding": 1,
+    "출시": 1,
+    "launch": 1
+  },
+  "blocklist": [
+    "부고",
+    "인사말",
+    "채용공고"
+  ],
+  "draft": {
+    "picks": 5,
+    "headline_candidates": 5,
+    "max_age_hours": 48
+  },
+  "collect": {
+    "timeout_seconds": 20,
+    "keep_days": 14
+  }
+}
