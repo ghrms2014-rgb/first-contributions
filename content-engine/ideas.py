@@ -142,8 +142,14 @@ def build_sheet(today, seed):
     return chosen, len(bank["used"]), total_combos
 
 
-def render(chosen, today, used_count, total_combos):
+def render(chosen, today, used_count, total_combos, rules=None, cautions=None):
+    cautions = cautions or {}
     out = [f"# 릴스 소재 — {today}", ""]
+    if rules:
+        out.append("## 촬영 규칙 (회사 제약)")
+        out.append("")
+        out.extend(f"- {rule}" for rule in rules)
+        out.append("")
     if not chosen:
         out += ["소재를 뽑지 못했습니다. `evergreen.json` 이 비었거나 조합을 전부 소진했습니다.", ""]
     out += [f"조합 소진: {used_count} / {total_combos:,}", "",
@@ -163,6 +169,9 @@ def render(chosen, today, used_count, total_combos):
         out.append(f"- **왜 통하나**: {angle['why']}")
         if idea["link"]:
             out.append(f"- **출처**: [{idea['source']}]({idea['link']})")
+        caution = cautions.get(idea["topic"])
+        if caution:
+            out.append(f"- **⚠ 주의**: {caution}")
         out.append("")
         out.append("훅 문장(직접 쓰세요): ")
         out.append("")
@@ -295,11 +304,14 @@ def main(argv):
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     chosen, used_count, total = build_sheet(today, seed=today)
+    config = load_json(os.path.join(BASE, "evergreen.json"), {})
 
     os.makedirs(IDEAS_DIR, exist_ok=True)
     path = os.path.join(IDEAS_DIR, f"{today}.md")
     with open(path, "w", encoding="utf-8") as fp:
-        fp.write(render(chosen, today, used_count, total))
+        fp.write(render(chosen, today, used_count, total,
+                        rules=config.get("filming_rules"),
+                        cautions=config.get("cautions")))
 
     news = sum(1 for idea in chosen if idea["kind"] == "뉴스")
     print(f"소재 {len(chosen)}개 (뉴스 {news} + 상시 {len(chosen) - news}) -> {path}")

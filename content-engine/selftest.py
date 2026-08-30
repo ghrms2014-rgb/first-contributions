@@ -178,6 +178,29 @@ check("팔로우/1k 계산", abs(rate - 0.331) < 0.01, f"-> {rate}")
 check("조회수 아닌 도달 기준",
       ideas.score_from_metrics(3000, 40)[0] > ideas.score_from_metrics(45280, 15)[0])
 
+print("11) 회사 촬영 제약")
+ever_raw = json.load(open(os.path.join(BASE, "evergreen.json"), encoding="utf-8"))
+rules = ever_raw.get("filming_rules", [])
+cautions = ever_raw.get("cautions", {})
+check("촬영 규칙 등록됨", len(rules) >= 3, f"-> {len(rules)}")
+check("로고 금지 규칙", any("로고" in r for r in rules))
+check("현장 금지 규칙", any("현장" in r for r in rules))
+check("주의 주제 등록됨", len(cautions) >= 3, f"-> {len(cautions)}")
+check("주의 주제가 실재하는 주제", all(t in group_of for t in cautions))
+
+risky_sheet = [{"kind": "안전·현장", "topic": next(iter(cautions)),
+                "angle": by_id_cfg["myth"], "link": "", "source": "",
+                "key": "myth-test"}]
+rendered = ideas.render(risky_sheet, "2026-01-01", 0, 1, rules=rules, cautions=cautions)
+check("시트 상단에 촬영 규칙", "촬영 규칙" in rendered and rules[0] in rendered)
+check("위험 주제에 경고 표기", "⚠ 주의" in rendered)
+check("규칙 없으면 섹션 없음", "촬영 규칙" not in ideas.render(risky_sheet, "2026-01-01", 0, 1))
+
+day_angle = by_id_cfg["day"]
+check("하루 기록 앵글이 현장 밖 전제",
+      "현장 밖" in day_angle["frame"] or "집" in day_angle["hook"],
+      f"-> {day_angle['frame']}")
+
 print()
 if failures:
     print(f"실패 {len(failures)}건: {', '.join(failures)}")
