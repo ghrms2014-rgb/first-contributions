@@ -13,8 +13,14 @@ sys.path.insert(0, BASE)
 import build_site  # noqa: E402
 import collect  # noqa: E402
 import draft  # noqa: E402
+import ideas  # noqa: E402
 
-steps = [("수집", collect.main), ("초안", draft.main), ("사이트 빌드", build_site.main)]
+steps = [
+    ("수집", collect.main),
+    ("릴스 소재", lambda: ideas.main([])),
+    ("초안", draft.main),
+    ("사이트 빌드", build_site.main),
+]
 
 for number, (label, run) in enumerate(steps, start=1):
     print(f"\n[{number}/{len(steps)}] {label}")
@@ -23,4 +29,4 @@ for number, (label, run) in enumerate(steps, start=1):
         print(f"'{label}' 단계 실패 (종료 코드 {code})")
         raise SystemExit(code)
 
-print("\n완료. content-engine/drafts/ 에서 오늘 초안을 확인하세요.")
+print("\n완료. content-engine/ideas/ 에서 오늘 릴스 소재를 확인하세요.")

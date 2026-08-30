@@ -4,6 +4,7 @@
     python3 content-engine/selftest.py
 """
 
+import json
 import os
 import sys
 
@@ -122,6 +123,48 @@ feed = build_site.build_feed(brand_on, [{"title": "글 <제목>", "slug": "a.htm
 check("XML 선언", feed.startswith("<?xml"))
 check("항목 포함", "<item>" in feed and "a.html" in feed)
 check("특수문자 이스케이프", "글 &lt;제목&gt;" in feed)
+
+print("9) 소재 엔진")
+import ideas  # noqa: E402
+
+angles_cfg = json.load(open(os.path.join(BASE, "angles.json"), encoding="utf-8"))["angles"]
+ever_cfg = json.load(open(os.path.join(BASE, "evergreen.json"), encoding="utf-8"))["topics"]
+by_id_cfg = {a["id"]: a for a in angles_cfg}
+group_of = {t: g for g, b in ever_cfg.items() for t in b["items"]}
+
+check("앵글 정의 로드", len(angles_cfg) >= 5)
+check("모든 분류에 앵글 지정", all(b.get("angles") for b in ever_cfg.values()))
+check("지정된 앵글이 실재함",
+      all(a in by_id_cfg for b in ever_cfg.values() for a in b["angles"]))
+
+sheet, _, combos = ideas.build_sheet("2026-01-01", "selftest-seed")
+check("소재가 생성됨", len(sheet) > 0, f"-> {len(sheet)}")
+check("조합 총량 계산됨", combos > 0, f"-> {combos}")
+
+violations = []
+for entry in sheet:
+    aid = entry["angle"]["id"]
+    if entry["kind"] == "뉴스":
+        if aid not in ideas.NEWS_ANGLES:
+            violations.append(f"뉴스/{aid}")
+    else:
+        grp = group_of.get(entry["topic"])
+        if grp is None or aid not in ever_cfg[grp]["angles"]:
+            violations.append(f"{grp}/{aid}")
+        elif by_id_cfg[aid].get("news_only"):
+            violations.append(f"상시에 뉴스전용/{aid}")
+check("앵글-분류 규칙 위반 없음", not violations, f"-> {violations[:3]}")
+
+keys = [entry["key"] for entry in sheet]
+check("소재 키 중복 없음", len(keys) == len(set(keys)))
+check("같은 시드면 같은 결과",
+      [e["key"] for e in ideas.build_sheet("2026-01-01", "selftest-seed")[0]] == keys)
+check("다른 시드면 다른 결과",
+      [e["key"] for e in ideas.build_sheet("2026-01-01", "other-seed")[0]] != keys)
+
+body = ideas.render(sheet, "2026-01-01", 0, combos)
+check("소재 시트에 키 표기", sheet[0]["key"] in body)
+check("소재 시트에 훅 지침", "첫 3초" in body)
 
 print()
 if failures:

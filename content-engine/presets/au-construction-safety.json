@@ -1,13 +1,14 @@
 {
+  "note": "호주 건설현장 안전/취업. @hokeun_downunder 계정용 릴스 소재 수집.",
   "brand": {
     "title": "호주 안전관리자 호근",
     "tagline": "호주 건설현장, 있는 그대로.",
     "author": "호근",
-    "base_url": "https://example.github.io/aussie-business-ai",
+    "base_url": "",
     "lang": "ko",
+    "subscribe_url": "",
     "subscribe_heading": "호주 건설현장 취업 체크리스트 무료로 받기",
-    "subscribe_blurb": "White Card부터 첫 현장 출근까지, 제가 실제로 거친 순서 그대로.",
-    "subscribe_url": "https://aussiebusinessai.substack.com"
+    "subscribe_blurb": "White Card부터 첫 현장 출근까지, 제가 실제로 거친 순서 그대로."
   },
   "sources": [
     {
@@ -103,14 +104,5 @@
     "make money fast",
     "부고",
     "분양 광고"
-  ],
-  "draft": {
-    "picks": 5,
-    "headline_candidates": 5,
-    "max_age_hours": 48
-  },
-  "collect": {
-    "timeout_seconds": 20,
-    "keep_days": 14
-  }
+  ]
 }

@@ -28,10 +28,10 @@ jobs:
         run: |
           git config user.name "content-engine"
           git config user.email "actions@github.com"
-          git add content-engine/data content-engine/drafts content-engine/site
+          git add content-engine/data content-engine/drafts content-engine/ideas content-engine/site
           if git diff --staged --quiet; then
             echo "새로 추가된 내용이 없습니다."
           else
-            git commit -m "chore(content): $(date -u +%Y-%m-%d) 초안 자동 생성"
+            git commit -m "chore(content): $(date -u +%Y-%m-%d) 소재·초안 자동 생성"
             git push
           fi
