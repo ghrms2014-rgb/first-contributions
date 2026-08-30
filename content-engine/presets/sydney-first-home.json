@@ -1,0 +1,63 @@
+{
+  "note": "시드니 생애 첫 주택 구매자. 광고 단가(금융)가 가장 높지만 경쟁도 셈.",
+  "brand": {
+    "title": "Sydney First Home Brief",
+    "tagline": "Rates, grants and auction results for Sydney first-home buyers. Weekly.",
+    "author": "",
+    "base_url": ""
+  },
+  "sources": [
+    {
+      "name": "Sydney property market",
+      "url": "https://news.google.com/rss/search?q=Sydney+property+market+house+prices&hl=en-AU&gl=AU&ceid=AU:en",
+      "enabled": true
+    },
+    {
+      "name": "RBA & interest rates",
+      "url": "https://news.google.com/rss/search?q=RBA+interest+rate+decision+mortgage&hl=en-AU&gl=AU&ceid=AU:en",
+      "enabled": true
+    },
+    {
+      "name": "First home buyer schemes",
+      "url": "https://news.google.com/rss/search?q=first+home+buyer+scheme+Australia+grant&hl=en-AU&gl=AU&ceid=AU:en",
+      "enabled": true
+    },
+    {
+      "name": "NSW housing policy",
+      "url": "https://news.google.com/rss/search?q=NSW+housing+policy+stamp+duty&hl=en-AU&gl=AU&ceid=AU:en",
+      "enabled": true
+    },
+    {
+      "name": "Auction results",
+      "url": "https://news.google.com/rss/search?q=Sydney+auction+clearance+rate&hl=en-AU&gl=AU&ceid=AU:en",
+      "enabled": true
+    }
+  ],
+  "keywords": {
+    "RBA": 3,
+    "interest rate": 3,
+    "first home": 3,
+    "mortgage": 3,
+    "stamp duty": 3,
+    "Sydney": 3,
+    "deposit": 2,
+    "grant": 2,
+    "scheme": 2,
+    "auction": 2,
+    "clearance": 2,
+    "NSW": 2,
+    "rent": 2,
+    "house price": 2,
+    "cut": 2,
+    "hike": 2,
+    "lender": 1,
+    "refinance": 1
+  },
+  "blocklist": [
+    "obituary",
+    "horoscope",
+    "celebrity home",
+    "betting",
+    "casino"
+  ]
+}

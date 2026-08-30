@@ -71,7 +71,13 @@ check("같은 링크면 같은 id", collect.parse_feed(RSS_SAMPLE, "x")[0]["id"]
 check("다른 링크면 다른 id", rss_items[0]["id"] != rss_items[1]["id"])
 
 print("4) 점수 계산")
-config = collect.load_config()
+# 사용자가 config.json 을 바꿔도 검사 결과가 흔들리면 안 되므로 고정 설정을 쓴다.
+config = {
+    "brand": {"title": "테스트 브리핑", "tagline": "검사용", "author": "tester"},
+    "keywords": {"OpenAI": 3, "LLM": 3, "Anthropic": 2, "open source": 2, "launch": 1},
+    "blocklist": ["부고", "인사말"],
+    "draft": {"picks": 5, "headline_candidates": 5, "max_age_hours": 48},
+}
 scored = draft.score_items(rss_items + atom_items, config, now=draft.parse_when("2026-08-27T12:00:00+00:00"))
 check("키워드 있는 글이 위로", scored[0]["title"] != "부고 알림", f"-> {scored[0]['title']}")
 check("차단어 글 제외", all(item["title"] != "부고 알림" for item in scored))

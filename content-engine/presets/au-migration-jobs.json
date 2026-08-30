@@ -1,0 +1,62 @@
+{
+  "note": "호주 비자/구직 시장. 독자 절실함이 커서 개봉률이 높음. 규제 주의(README 참고).",
+  "brand": {
+    "title": "Australia Visa & Work Brief",
+    "tagline": "Visa changes and hiring news for people building a life in Australia.",
+    "author": "",
+    "base_url": ""
+  },
+  "sources": [
+    {
+      "name": "Visa & migration policy",
+      "url": "https://news.google.com/rss/search?q=Australia+visa+changes+migration+policy&hl=en-AU&gl=AU&ceid=AU:en",
+      "enabled": true
+    },
+    {
+      "name": "Skilled migration",
+      "url": "https://news.google.com/rss/search?q=skilled+migration+Australia+occupation+list&hl=en-AU&gl=AU&ceid=AU:en",
+      "enabled": true
+    },
+    {
+      "name": "Job market & hiring",
+      "url": "https://news.google.com/rss/search?q=Australia+job+market+hiring+unemployment&hl=en-AU&gl=AU&ceid=AU:en",
+      "enabled": true
+    },
+    {
+      "name": "International students",
+      "url": "https://news.google.com/rss/search?q=international+students+Australia+visa&hl=en-AU&gl=AU&ceid=AU:en",
+      "enabled": true
+    },
+    {
+      "name": "Home Affairs announcements",
+      "url": "https://news.google.com/rss/search?q=Department+Home+Affairs+immigration+announcement&hl=en-AU&gl=AU&ceid=AU:en",
+      "enabled": true
+    }
+  ],
+  "keywords": {
+    "visa": 3,
+    "migration": 3,
+    "subclass": 3,
+    "permanent residency": 3,
+    "skilled": 2,
+    "sponsor": 2,
+    "nomination": 2,
+    "Home Affairs": 2,
+    "occupation list": 2,
+    "hiring": 2,
+    "job": 2,
+    "wage": 2,
+    "salary": 2,
+    "student": 2,
+    "Australia": 2,
+    "cap": 2,
+    "intake": 1,
+    "processing time": 1
+  },
+  "blocklist": [
+    "obituary",
+    "horoscope",
+    "betting",
+    "casino"
+  ]
+}

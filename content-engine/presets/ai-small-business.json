@@ -1,8 +1,9 @@
 {
+  "note": "호주 소상공인을 위한 AI/자동화 도구. SaaS 제휴 단가가 가장 높은 조합.",
   "brand": {
     "title": "Aussie Business AI",
     "tagline": "Practical AI and automation for Australian small business. Three picks, every Tuesday.",
-    "author": "ghrms2014",
+    "author": "",
     "base_url": ""
   },
   "sources": [
@@ -58,14 +59,5 @@
     "sponsored content",
     "betting",
     "casino"
-  ],
-  "draft": {
-    "picks": 5,
-    "headline_candidates": 5,
-    "max_age_hours": 48
-  },
-  "collect": {
-    "timeout_seconds": 20,
-    "keep_days": 14
-  }
+  ]
 }
