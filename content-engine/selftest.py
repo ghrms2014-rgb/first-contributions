@@ -99,6 +99,30 @@ check("링크 변환", '<a href="https://a.b"' in html_out)
 check("목록 변환", "<li>하나</li>" in html_out)
 check("HTML 이스케이프", "&lt;script&gt;" in build_site.markdown_to_html("<script>x</script>"))
 
+print("7) 페이지 메타데이터 / 구독 박스")
+brand_off = {"title": "Test", "tagline": "t", "author": "a", "lang": "en-AU", "base_url": ""}
+brand_on = dict(brand_off, subscribe_url="https://example.substack.com", base_url="https://ex.com",
+                subscribe_heading="Join", subscribe_blurb="Free weekly")
+off = build_site.page(brand_off, "제목", "<p>본문</p>", description="설명입니다", canonical="a.html")
+on = build_site.page(brand_on, "제목", "<p>본문</p>", description="설명입니다", canonical="a.html")
+check("lang 반영", 'lang="en-AU"' in off)
+check("description 반영", 'content="설명입니다"' in off)
+check("og:title 있음", 'property="og:title"' in off)
+check("구독 URL 없으면 버튼 없음", '<section class="subscribe">' not in off)
+check("구독 URL 있으면 버튼 있음", "example.substack.com" in on and "Join" in on)
+check("base_url 없으면 canonical 없음", "rel=\"canonical\"" not in off)
+check("base_url 있으면 canonical 절대주소", 'rel="canonical" href="https://ex.com/a.html"' in on)
+sample_md = "# 제목\n\n실제 **본문** 첫 줄\n"
+extracted = build_site.first_paragraph(sample_md)
+check("첫 문단 추출", extracted == "실제 본문 첫 줄", f"-> {extracted!r}")
+
+print("8) RSS 피드")
+feed = build_site.build_feed(brand_on, [{"title": "글 <제목>", "slug": "a.html",
+                                          "description": "요약", "rfc822": "Sun, 30 Aug 2026 00:00:00 +0000"}])
+check("XML 선언", feed.startswith("<?xml"))
+check("항목 포함", "<item>" in feed and "a.html" in feed)
+check("특수문자 이스케이프", "글 &lt;제목&gt;" in feed)
+
 print()
 if failures:
     print(f"실패 {len(failures)}건: {', '.join(failures)}")

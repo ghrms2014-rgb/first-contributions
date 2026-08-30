@@ -9,7 +9,8 @@ import html
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
+from email.utils import format_datetime
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 POSTS_DIR = os.path.join(BASE, "posts")
@@ -124,15 +125,71 @@ def markdown_to_html(text):
     return "\n".join(out)
 
 
-def page(brand, title, body, is_index=False):
+SUBSCRIBE_CSS = """
+.subscribe { margin:2.5rem 0; padding:1.5rem; border:1px solid var(--line); border-radius:10px; background:rgba(127,127,140,.06); }
+.subscribe h2 { margin:0 0 .4rem; font-size:1.1rem; }
+.subscribe p { margin:0 0 1rem; color:var(--muted); font-size:.9rem; }
+.subscribe a.cta { display:inline-block; background:var(--accent); color:#fff; text-decoration:none;
+  padding:.7rem 1.4rem; border-radius:8px; font-weight:600; }
+"""
+
+
+def subscribe_box(brand):
+    """구독 링크가 설정돼 있을 때만 신청 박스를 넣는다."""
+    url = brand.get("subscribe_url", "").strip()
+    if not url:
+        return ""
+    return (
+        '<section class="subscribe">'
+        f'<h2>{html.escape(brand.get("subscribe_heading", "Get this in your inbox"))}</h2>'
+        f'<p>{html.escape(brand.get("subscribe_blurb", ""))}</p>'
+        f'<a class="cta" href="{html.escape(url, quote=True)}" rel="noopener">Subscribe — free</a>'
+        "</section>"
+    )
+
+
+def first_paragraph(text, limit=155):
+    """OG/검색 결과에 쓸 요약. 본문 첫 문단을 쓴다."""
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith(("#", ">", "-", "*", "---", "|")):
+            continue
+        line = LINK_RE.sub(r"\1", line)
+        line = BOLD_RE.sub(r"\1", line).replace("*", "").replace("`", "")
+        if len(line) > limit:
+            line = line[: limit - 1].rstrip() + "\u2026"
+        return line
+    return ""
+
+
+def page(brand, title, body, description="", is_index=False, canonical=""):
     home = "index.html" if not is_index else "#"
+    lang = brand.get("lang", "en")
+    description = description or brand.get("tagline", "")
+    base = brand.get("base_url", "").rstrip("/")
+
+    tags = [
+        f'<meta name="description" content="{html.escape(description, quote=True)}">',
+        f'<meta property="og:title" content="{html.escape(title, quote=True)}">',
+        f'<meta property="og:description" content="{html.escape(description, quote=True)}">',
+        f'<meta property="og:type" content="{"website" if is_index else "article"}">',
+        f'<meta property="og:site_name" content="{html.escape(brand["title"], quote=True)}">',
+        '<meta name="twitter:card" content="summary">',
+        '<link rel="alternate" type="application/rss+xml" title="RSS" href="feed.xml">',
+    ]
+    if base and canonical:
+        url = f"{base}/{canonical}"
+        tags.append(f'<link rel="canonical" href="{html.escape(url, quote=True)}">')
+        tags.append(f'<meta property="og:url" content="{html.escape(url, quote=True)}">')
+
     return f"""<!doctype html>
-<html lang="ko">
+<html lang="{html.escape(lang, quote=True)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(title)}</title>
-<style>{STYLE}</style>
+{chr(10).join(tags)}
+<style>{STYLE}{SUBSCRIBE_CSS}</style>
 </head>
 <body>
 <div class="wrap">
@@ -141,13 +198,41 @@ def page(brand, title, body, is_index=False):
   <p>{html.escape(brand.get('tagline', ''))}</p>
 </header>
 {body}
+{subscribe_box(brand)}
 <footer class="site">
-  <p>{html.escape(brand.get('author', ''))} · 이 페이지는 GitHub Pages로 무료 호스팅됩니다.</p>
+  <p>{html.escape(brand.get('author', ''))} &middot; <a href="feed.xml">RSS</a></p>
 </footer>
 </div>
 </body>
 </html>
 """
+
+
+def build_feed(brand, posts):
+    """RSS 2.0 피드. 독자가 구독할 수 있고, Substack/Zapier로 넘기기도 쉽다."""
+    base = brand.get("base_url", "").rstrip("/")
+    entries = []
+    for post in posts[:20]:
+        link = f"{base}/{post['slug']}" if base else post["slug"]
+        entries.append(
+            "<item>"
+            f"<title>{html.escape(post['title'])}</title>"
+            f"<link>{html.escape(link)}</link>"
+            f"<guid isPermaLink=\"false\">{html.escape(post['slug'])}</guid>"
+            f"<description>{html.escape(post.get('description', ''))}</description>"
+            f"<pubDate>{html.escape(post.get('rfc822', ''))}</pubDate>"
+            "</item>"
+        )
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<rss version="2.0"><channel>'
+        f"<title>{html.escape(brand['title'])}</title>"
+        f"<link>{html.escape(base or 'index.html')}</link>"
+        f"<description>{html.escape(brand.get('tagline', ''))}</description>"
+        f"<language>{html.escape(brand.get('lang', 'en'))}</language>"
+        + "".join(entries)
+        + "</channel></rss>\n"
+    )
 
 
 def slugify(name):
@@ -172,10 +257,20 @@ def main():
             continue
         title = meta.get("title") or name[:-3]
         date = meta.get("date") or name[:10]
+        description = meta.get("description") or first_paragraph(body)
         slug = slugify(name[:-3]) + ".html"
+
+        try:
+            stamp = datetime.strptime(date, "%Y-%m-%d")
+            rfc822 = format_datetime(stamp.replace(tzinfo=timezone.utc))
+        except ValueError:
+            rfc822 = format_datetime(datetime.now(timezone.utc))
+
         with open(os.path.join(SITE_DIR, slug), "w", encoding="utf-8") as fp:
-            fp.write(page(brand, title, markdown_to_html(body)))
-        posts.append({"title": title, "date": date, "slug": slug})
+            fp.write(page(brand, title, markdown_to_html(body), description=description, canonical=slug))
+        posts.append(
+            {"title": title, "date": date, "slug": slug, "description": description, "rfc822": rfc822}
+        )
         print(f"  [발행] {name} -> site/{slug}")
 
     posts.sort(key=lambda post: post["date"], reverse=True)
@@ -187,7 +282,7 @@ def main():
             )
             for post in posts
         )
-        index_body = f"<h1>지난 글</h1>\n<ul class=\"index\">\n{items}\n</ul>"
+        index_body = f"<h1>Latest</h1>\n<ul class=\"index\">\n{items}\n</ul>"
     else:
         index_body = (
             "<h1>아직 발행된 글이 없습니다</h1>"
@@ -196,10 +291,16 @@ def main():
         )
 
     with open(os.path.join(SITE_DIR, "index.html"), "w", encoding="utf-8") as fp:
-        fp.write(page(brand, brand["title"], index_body, is_index=True))
+        fp.write(page(brand, brand["title"], index_body, is_index=True, canonical="index.html"))
+
+    with open(os.path.join(SITE_DIR, "feed.xml"), "w", encoding="utf-8") as fp:
+        fp.write(build_feed(brand, posts))
 
     # Jekyll이 파일을 다시 가공하지 않도록 막는다.
     open(os.path.join(SITE_DIR, ".nojekyll"), "w").close()
+
+    if not brand.get("subscribe_url"):
+        print("  [알림] config.json 의 brand.subscribe_url 이 비어 있어 구독 버튼이 표시되지 않습니다.")
 
     print(f"글 {len(posts)}편 -> {SITE_DIR} ({datetime.now().strftime('%H:%M:%S')})")
     return 0

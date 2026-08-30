@@ -3,7 +3,11 @@
     "title": "Aussie Business AI",
     "tagline": "Practical AI and automation for Australian small business. Three picks, every Tuesday.",
     "author": "ghrms2014",
-    "base_url": ""
+    "base_url": "https://example.github.io/aussie-business-ai",
+    "lang": "en-AU",
+    "subscribe_heading": "Get three practical AI picks every Tuesday",
+    "subscribe_blurb": "Free. Written for Australian small business owners, not engineers. Unsubscribe anytime.",
+    "subscribe_url": "https://aussiebusinessai.substack.com"
   },
   "sources": [
     {
@@ -12,23 +16,38 @@
       "enabled": true
     },
     {
-      "name": "Automation & productivity tools",
-      "url": "https://news.google.com/rss/search?q=automation+tools+small+business+software&hl=en-AU&gl=AU&ceid=AU:en",
+      "name": "Automation & no-code tools",
+      "url": "https://news.google.com/rss/search?q=automation+no-code+workflow+tool+small+business&hl=en-AU&gl=AU&ceid=AU:en",
       "enabled": true
     },
     {
-      "name": "Australian startups & funding",
-      "url": "https://news.google.com/rss/search?q=Australian+startup+funding+raise&hl=en-AU&gl=AU&ceid=AU:en",
+      "name": "Accounting & bookkeeping tech",
+      "url": "https://news.google.com/rss/search?q=Xero+MYOB+QuickBooks+accounting+software+AI&hl=en-AU&gl=AU&ceid=AU:en",
       "enabled": true
     },
     {
-      "name": "ATO & compliance for business",
-      "url": "https://news.google.com/rss/search?q=ATO+small+business+tax+deadline&hl=en-AU&gl=AU&ceid=AU:en",
+      "name": "ATO & compliance",
+      "url": "https://news.google.com/rss/search?q=ATO+small+business+tax+deadline+compliance&hl=en-AU&gl=AU&ceid=AU:en",
       "enabled": true
     },
     {
-      "name": "SaaS launches",
-      "url": "https://news.google.com/rss/search?q=SaaS+launch+pricing+small+business&hl=en-AU&gl=AU&ceid=AU:en",
+      "name": "SaaS pricing & launches",
+      "url": "https://news.google.com/rss/search?q=SaaS+pricing+change+launch+small+business+software&hl=en-AU&gl=AU&ceid=AU:en",
+      "enabled": true
+    },
+    {
+      "name": "Australian startups",
+      "url": "https://news.google.com/rss/search?q=Australian+startup+funding+raise+software&hl=en-AU&gl=AU&ceid=AU:en",
+      "enabled": true
+    },
+    {
+      "name": "SmartCompany (매체 지정)",
+      "url": "https://news.google.com/rss/search?q=site%3Asmartcompany.com.au+technology+OR+AI&hl=en-AU&gl=AU&ceid=AU:en",
+      "enabled": true
+    },
+    {
+      "name": "Startup Daily (매체 지정)",
+      "url": "https://news.google.com/rss/search?q=site%3Astartupdaily.net+AI+OR+software&hl=en-AU&gl=AU&ceid=AU:en",
       "enabled": true
     }
   ],
@@ -37,27 +56,48 @@
     "automation": 3,
     "small business": 3,
     "sole trader": 3,
-    "Xero": 2,
-    "MYOB": 2,
-    "payroll": 2,
+    "SME": 3,
+    "Australia": 3,
+    "Australian": 3,
+    "ATO": 3,
+    "GST": 2,
+    "ABN": 2,
+    "Xero": 3,
+    "MYOB": 3,
+    "QuickBooks": 2,
+    "Square": 2,
+    "Shopify": 2,
+    "Canva": 2,
+    "Atlassian": 2,
+    "HubSpot": 2,
+    "free": 3,
+    "pricing": 3,
+    "price": 2,
+    "cost": 2,
+    "save": 2,
     "invoice": 2,
-    "ATO": 2,
-    "productivity": 2,
-    "SaaS": 2,
-    "free": 2,
-    "pricing": 2,
-    "Australia": 2,
-    "Australian": 2,
+    "payroll": 2,
+    "bookkeeping": 2,
+    "customer": 2,
+    "chatbot": 2,
+    "copilot": 2,
+    "agent": 2,
+    "integration": 2,
+    "no-code": 2,
     "launch": 1,
+    "update": 1,
     "tool": 1,
     "startup": 1
   },
   "blocklist": [
     "obituary",
     "horoscope",
-    "sponsored content",
     "betting",
-    "casino"
+    "casino",
+    "crypto scam",
+    "sponsored content",
+    "advertorial",
+    "make money fast"
   ],
   "draft": {
     "picks": 5,

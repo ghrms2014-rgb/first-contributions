@@ -107,6 +107,27 @@ python3 content-engine/run.py
 > 설정을 바꾼 뒤 문제가 있는지 확인하려면 `python3 content-engine/selftest.py` 를
 > 실행하세요. 인터넷 없이도 도는 검사입니다.
 
+### (3-2) 구독 신청 링크 연결 — 이거 안 하면 수익은 영원히 A$0입니다
+
+읽을 사람을 모으지 못하면 제휴도 유료 구독도 성립하지 않습니다.
+**Substack(또는 Beehiiv)에 무료 계정을 먼저 만들고**, 그 주소를
+`config.json` 의 `brand.subscribe_url` 에 넣으세요.
+
+```json
+"brand": {
+  "subscribe_url": "https://내이름.substack.com",
+  "subscribe_heading": "Get three practical AI picks every Tuesday",
+  "subscribe_blurb": "Free. Written for Australian small business owners, not engineers."
+}
+```
+
+넣는 순간 모든 페이지 아래에 구독 버튼이 생깁니다. 비워두면 버튼이
+아예 나오지 않고, 빌드할 때 경고가 뜹니다.
+
+`brand.base_url` 에 GitHub Pages 주소를 넣으면 canonical 태그와 RSS의
+절대 주소가 채워집니다. 링크드인·X에 공유했을 때 제목과 설명이
+제대로 보이려면 이게 있어야 합니다.
+
 ### (4) 자동 실행 켜기
 
 `.github/workflows/content-engine.yml` 이 이미 들어 있습니다. 저장소에 push하면
