@@ -139,8 +139,12 @@ Actions의 cron은 UTC 고정이라 서머타임에 따라 1시간 밀립니다.
 
 ### (5) 웹사이트 켜기
 
-**Settings → Pages → Source: Deploy from a branch** 로 가서
-브랜치와 `/content-engine/site` 폴더를 고르면 무료 주소가 생깁니다.
+**Settings → Pages → Source 를 `GitHub Actions` 로** 바꾸세요.
+(`Deploy from a branch` 는 루트나 `/docs` 만 고를 수 있는데 이 저장소의
+`/docs` 는 이미 다른 용도로 차 있어서 쓸 수 없습니다.)
+
+`.github/workflows/pages.yml` 이 `creator-hub` 와 `content-engine` 을 함께
+빌드해 배포합니다. 허브가 루트, 글 목록이 `/brief/` 입니다.
 
 ---
 

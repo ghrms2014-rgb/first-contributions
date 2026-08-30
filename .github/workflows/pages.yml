@@ -1,0 +1,47 @@
+name: pages
+
+# 허브 페이지를 GitHub Pages로 배포한다.
+# 브랜치 배포는 루트나 /docs 만 고를 수 있는데 이 저장소의 /docs 는 이미
+# 다른 용도로 차 있어서, Actions 로 임의 폴더(_site)를 올린다.
+on:
+  push:
+    branches: [claude/money-earning-methods-e9k2kd]
+    paths:
+      - "creator-hub/**"
+      - "content-engine/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 사이트 빌드
+        run: |
+          python3 content-engine/build_site.py
+          python3 creator-hub/build.py
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
