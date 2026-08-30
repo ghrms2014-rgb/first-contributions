@@ -1,9 +1,11 @@
 name: content-engine
 
-# 매일 한국시간 아침 7시(UTC 22:00)에 뉴스를 모아 초안을 만들어 커밋한다.
+# 매일 시드니 아침에 뉴스를 모아 초안을 만들어 커밋한다.
+# GitHub Actions의 cron은 UTC 고정이라 서머타임을 따라가지 않는다.
+# UTC 20:00 = 시드니 06:00 (AEST, 4~10월) / 07:00 (AEDT, 10~4월).
 on:
   schedule:
-    - cron: "0 22 * * *"
+    - cron: "0 20 * * *"
   workflow_dispatch:
 
 permissions:
