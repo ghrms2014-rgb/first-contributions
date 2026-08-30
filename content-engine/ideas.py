@@ -3,14 +3,18 @@
 
     python3 content-engine/ideas.py                  # 오늘 소재 뽑기
     python3 content-engine/ideas.py --used <키>       # 촬영했다고 기록
-    python3 content-engine/ideas.py --used <키> --score 4
+    python3 content-engine/ideas.py --used <키> --reach 45280 --follows 15 --saves 7
+    python3 content-engine/ideas.py --log "제목" --angle myth --reach 45280 --follows 15
     python3 content-engine/ideas.py --stats          # 어떤 앵글이 잘 됐나
 
 소재 고갈은 주제가 아니라 각도가 떨어질 때 온다. 같은 주제도 앵글이
 바뀌면 다른 영상이 된다. 그래서 (주제 x 앵글) 조합 단위로 관리한다.
 
---score 는 1~5. 실제 성과를 넣으면 잘 먹힌 앵글이 더 자주 나온다.
-아무거나 올리던 걸 되풀이하지 않으려면 이 기록이 핵심이다.
+성과는 조회수가 아니라 '도달 1,000명당 팔로우'로 잰다. 조회수는 호기심으로
+퍼진 것과 타깃에게 닿은 것을 구분하지 못한다. 45,000명이 보고 15명이
+팔로우한 영상은, 3,000명이 보고 40명이 팔로우한 영상보다 나쁘다.
+
+--log 는 이 엔진으로 만들지 않은 과거 게시물도 기록해 학습에 쓰기 위한 것이다.
 """
 
 import hashlib
@@ -24,6 +28,10 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 IDEAS_DIR = os.path.join(BASE, "ideas")
 BANK_PATH = os.path.join(BASE, "ideas", "bank.json")
 ITEMS_PATH = os.path.join(BASE, "data", "items.json")
+
+# 도달 1,000명당 팔로우 -> 1~5점. 업계 통설상 잘 전환되는 릴스는 10~30 수준이다.
+# 계정이 자리를 잡으면 이 기준을 올려 잡아도 된다.
+FOLLOW_RATE_TIERS = [(20.0, 5), (8.0, 4), (3.0, 3), (1.0, 2)]
 
 NEWS_COUNT = 3
 EVERGREEN_COUNT = 4
@@ -164,16 +172,47 @@ def render(chosen, today, used_count, total_combos):
     return "\n".join(out)
 
 
-def mark_used(key, score):
+def score_from_metrics(reach, follows):
+    """조회수가 아니라 전환으로 점수를 매긴다."""
+    if not reach:
+        return None, None
+    rate = follows / reach * 1000
+    for threshold, points in FOLLOW_RATE_TIERS:
+        if rate >= threshold:
+            return points, rate
+    return 1, rate
+
+
+def mark_used(key, score, metrics):
     bank = load_bank()
     angle = key.split("-")[0]
-    bank["used"][key] = {"angle": angle, "score": score,
-                         "date": datetime.now(timezone.utc).strftime("%Y-%m-%d")}
+    entry = {"angle": angle, "date": datetime.now(timezone.utc).strftime("%Y-%m-%d")}
+
+    rate = None
+    if metrics.get("reach"):
+        computed, rate = score_from_metrics(metrics["reach"], metrics.get("follows", 0))
+        score = score if score else computed
+        entry.update({k: v for k, v in metrics.items() if v is not None})
+        entry["follow_rate"] = round(rate, 2)
+    entry["score"] = score
+
+    if "title" in metrics and metrics["title"]:
+        entry["title"] = metrics["title"]
+
+    bank["used"][key] = entry
     save_bank(bank)
-    label = f"성과 {score}/5" if score else "성과 미기록"
-    print(f"기록 완료: {key} ({angle}, {label})")
-    if not score:
-        print("  성과를 넣으면 잘 되는 앵글이 더 자주 나옵니다: --score 1~5")
+
+    print(f"기록 완료: {key} ({angle})")
+    if rate is not None:
+        print(f"  도달 {metrics['reach']:,}명 -> 팔로우 {metrics.get('follows', 0)}명")
+        print(f"  도달 1,000명당 팔로우 {rate:.2f}  ->  {score}/5점")
+        if rate < 1.0:
+            print("  [경고] 전환이 거의 없습니다. 조회수가 높아도 타깃이 아닌 사람에게 퍼진 것입니다.")
+    elif score:
+        print(f"  성과 {score}/5 (직접 입력)")
+    else:
+        print("  성과 미기록. 실제 수치를 넣으면 학습에 쓰입니다:")
+        print("    --reach <도달한 사람> --follows <팔로우> [--saves <저장>]")
     return 0
 
 
@@ -189,16 +228,25 @@ def show_stats():
         print("아직 기록이 없습니다. --used 로 촬영한 소재를 기록하세요.")
         return 0
 
-    print(f"{'앵글':<12} {'사용':>4} {'평균성과':>8}")
+    rates = {}
+    for entry in bank["used"].values():
+        if entry.get("follow_rate") is not None:
+            rates.setdefault(entry["angle"], []).append(entry["follow_rate"])
+
+    print(f"{'앵글':<14} {'사용':>4} {'평균점수':>8} {'팔로우/1k':>10}")
     ranked = []
     for angle_id, scores in rows.items():
-        rated = [s for s in scores if s]
+        rated = [value for value in scores if value]
         average = sum(rated) / len(rated) if rated else None
-        ranked.append((average or 0, angle_id, len(scores), average))
-    for _, angle_id, count, average in sorted(ranked, reverse=True):
+        rate_list = rates.get(angle_id, [])
+        rate = sum(rate_list) / len(rate_list) if rate_list else None
+        ranked.append((average or 0, angle_id, len(scores), average, rate))
+    for _, angle_id, count, average, rate in sorted(ranked, reverse=True):
         shown = f"{average:.1f}" if average else "-"
-        print(f"{names.get(angle_id, angle_id):<12} {count:>4} {shown:>8}")
+        rate_shown = f"{rate:.2f}" if rate is not None else "-"
+        print(f"{names.get(angle_id, angle_id):<14} {count:>4} {shown:>8} {rate_shown:>10}")
     print("\n평균이 높은 앵글이 다음 소재에 더 자주 나옵니다.")
+    print("팔로우/1k 가 조회수보다 중요합니다. 10 이상이면 잘 되고 있는 것입니다.")
     return 0
 
 
@@ -206,22 +254,44 @@ def main(argv):
     if "--stats" in argv:
         return show_stats()
 
-    if "--used" in argv:
+    def number(flag):
+        if flag not in argv:
+            return None
+        try:
+            return int(argv[argv.index(flag) + 1].replace(",", ""))
+        except (IndexError, ValueError):
+            print(f"{flag} 뒤에는 숫자가 와야 합니다.")
+            raise SystemExit(1)
+
+    if "--used" in argv or "--log" in argv:
+        score = number("--score")
+        if score is not None and not 1 <= score <= 5:
+            print("--score 는 1~5 사이여야 합니다.")
+            return 1
+        metrics = {"reach": number("--reach"), "follows": number("--follows") or 0,
+                   "saves": number("--saves")}
+
+        if "--log" in argv:
+            position = argv.index("--log")
+            if position + 1 >= len(argv):
+                print('사용법: --log "제목" --angle <앵글id> --reach N --follows N')
+                return 1
+            title = argv[position + 1]
+            if "--angle" not in argv:
+                angles = load_json(os.path.join(BASE, "angles.json"), {"angles": []})["angles"]
+                print("--angle 이 필요합니다. 사용 가능:")
+                for angle in angles:
+                    print(f"  {angle['id']:<10} {angle['name']}")
+                return 1
+            angle_id = argv[argv.index("--angle") + 1]
+            metrics["title"] = title
+            return mark_used(key_for(title, angle_id), score, metrics)
+
         position = argv.index("--used")
         if position + 1 >= len(argv):
-            print("사용법: --used <키> [--score 1~5]")
+            print("사용법: --used <키> [--reach N --follows N --saves N]")
             return 1
-        score = None
-        if "--score" in argv:
-            try:
-                score = int(argv[argv.index("--score") + 1])
-            except (IndexError, ValueError):
-                print("--score 는 1~5 사이 숫자여야 합니다.")
-                return 1
-            if not 1 <= score <= 5:
-                print("--score 는 1~5 사이여야 합니다.")
-                return 1
-        return mark_used(argv[position + 1], score)
+        return mark_used(argv[position + 1], score, metrics)
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     chosen, used_count, total = build_sheet(today, seed=today)

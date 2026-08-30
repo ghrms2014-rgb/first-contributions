@@ -166,6 +166,18 @@ body = ideas.render(sheet, "2026-01-01", 0, combos)
 check("소재 시트에 키 표기", sheet[0]["key"] in body)
 check("소재 시트에 훅 지침", "첫 3초" in body)
 
+print("10) 성과 지표 채점")
+check("전환 없음 -> 1점", ideas.score_from_metrics(45280, 15)[0] == 1,
+      f"-> {ideas.score_from_metrics(45280, 15)}")
+check("높은 전환 -> 4점", ideas.score_from_metrics(3000, 40)[0] == 4,
+      f"-> {ideas.score_from_metrics(3000, 40)}")
+check("매우 높은 전환 -> 5점", ideas.score_from_metrics(1000, 25)[0] == 5)
+check("도달 없으면 채점 불가", ideas.score_from_metrics(0, 5) == (None, None))
+rate = ideas.score_from_metrics(45280, 15)[1]
+check("팔로우/1k 계산", abs(rate - 0.331) < 0.01, f"-> {rate}")
+check("조회수 아닌 도달 기준",
+      ideas.score_from_metrics(3000, 40)[0] > ideas.score_from_metrics(45280, 15)[0])
+
 print()
 if failures:
     print(f"실패 {len(failures)}건: {', '.join(failures)}")
