@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 실행하면서 생기는 것들 — 사용자 데이터라 저장소에 넣지 않는다
+data/sessions/
+data/settings.json
+data/dictionary.json
+data/profiles/
+backups/
+logs/
+assets/sfx/*
+assets/bg/*
+!assets/sfx/.gitkeep
+!assets/bg/.gitkeep
+.pytest_cache/

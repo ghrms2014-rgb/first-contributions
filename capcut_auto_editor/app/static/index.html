@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>캡컷 자동 편집기</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="row">
+    <h1>캡컷 자동 편집기</h1>
+    <span class="session-name" id="sessionLabel">세션 없음</span>
+  </div>
+  <div class="row">
+    <select id="sessionSelect" style="width:220px"></select>
+    <button id="newSession">새 세션</button>
+    <button id="deleteSession">삭제</button>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ------------------------------------------------------------ 단계 -->
+  <nav class="card">
+    <h2>진행 단계</h2>
+    <ol class="steps" id="stepList"></ol>
+  </nav>
+
+  <!-- ------------------------------------------------------------ 본문 -->
+  <main id="panels">
+
+    <!-- 1. 설정 -->
+    <section class="card panel" data-step="setup">
+      <h2>1. 설정 확인</h2>
+      <p class="desc">캡컷 폴더와 필요한 프로그램이 준비됐는지 확인합니다.</p>
+      <div id="statusChecks"></div>
+      <div class="row" style="margin-top:12px">
+        <button id="recheck">다시 확인</button>
+        <button id="detectFolder">캡컷 폴더 자동 찾기</button>
+      </div>
+      <label class="field" style="margin-top:12px">
+        <span>캡컷 드래프트 폴더 (직접 지정)</span>
+        <div class="row">
+          <input type="text" id="draftFolder" placeholder="…/CapCut/User Data/Projects/com.lveditor.draft">
+          <button id="pickDraftFolder">찾아보기</button>
+          <button class="primary" id="saveDraftFolder">저장</button>
+        </div>
+      </label>
+
+      <details style="margin-top:12px">
+        <summary class="muted">세부 설정 (무음 감지 · 자막 · 전사)</summary>
+        <div class="grid2" style="margin-top:12px">
+          <label class="field"><span>무음 임계값 (dB)</span><input type="number" id="s_silence_db" step="1"></label>
+          <label class="field"><span>최소 무음 길이 (초)</span><input type="number" id="s_min_silence_sec" step="0.05"></label>
+          <label class="field"><span>컷 여유 (초)</span><input type="number" id="s_keep_padding_sec" step="0.02"></label>
+          <label class="field"><span>자막 한 줄 최대 글자</span><input type="number" id="s_subtitle_max_chars"></label>
+          <label class="field"><span>Whisper 모델</span>
+            <select id="s_whisper_model">
+              <option>tiny</option><option>base</option><option>small</option>
+              <option>medium</option><option>large-v3</option>
+            </select>
+          </label>
+          <label class="field"><span>전사 청크 (초)</span><input type="number" id="s_whisper_chunk_sec" step="60"></label>
+        </div>
+        <button class="primary" id="saveSettings">설정 저장</button>
+      </details>
+
+      <details style="margin-top:12px">
+        <summary class="muted">용어 사전 (오인식 교정)</summary>
+        <p class="muted">한 줄에 <code>잘못 들린 말 = 올바른 표기</code> 형식으로 적어 주세요.</p>
+        <textarea id="dictionary" placeholder="캡켓 = 캡컷&#10;유툽 = 유튜브"></textarea>
+        <button class="primary" id="saveDictionary">사전 저장</button>
+      </details>
+    </section>
+
+    <!-- 2. 원본 영상 -->
+    <section class="card panel hidden" data-step="sources">
+      <h2>2. 원본 영상 선택</h2>
+      <p class="desc">고른 순서대로 이어 붙여 하나의 타임라인으로 다룹니다.</p>
+      <div class="row">
+        <input type="text" id="browsePath" placeholder="폴더 경로">
+        <button id="browseGo">열기</button>
+        <button id="pickFiles">파일 선택 창</button>
+        <button id="pickFolder">폴더 선택 창</button>
+      </div>
+      <div class="row" id="shortcutRow" style="margin:8px 0"></div>
+      <div class="list" id="browseList"></div>
+
+      <h2 style="margin-top:16px">선택한 영상 <span class="badge" id="pickedCount">0개</span></h2>
+      <div class="list" id="pickedList"></div>
+      <div class="row end" style="margin-top:12px">
+        <button id="clearPicked">비우기</button>
+        <button class="primary" id="saveSources">이 순서로 확정</button>
+      </div>
+    </section>
+
+    <!-- 3. 캘리브레이션 -->
+    <section class="card panel hidden" data-step="calibration">
+      <h2>3. 캘리브레이션</h2>
+      <p class="desc">캡컷에서 직접 꾸며 둔 드래프트를 읽어 자막 크기·위치·색을 그대로 따라합니다.</p>
+      <label class="field">
+        <span>기준 드래프트</span>
+        <select id="calDraft"></select>
+      </label>
+      <label class="field">
+        <span>프로파일 이름</span>
+        <input type="text" id="calProfileName" value="default">
+      </label>
+      <div class="row">
+        <button class="primary" id="runCalibration">읽어 오기</button>
+        <button id="applyCalibration">이 프로파일 사용</button>
+        <button id="skipCalibration">건너뛰기 (기본값)</button>
+      </div>
+      <pre class="prompt hidden" id="calResult"></pre>
+    </section>
+
+    <!-- 4. 분석 + 전사 -->
+    <section class="card panel hidden" data-step="transcribe">
+      <h2>4. 오디오 분석 · 음성 전사</h2>
+      <p class="desc">무음을 찾아 컷 후보를 만들고, 음성을 글자로 옮깁니다. 길면 시간이 걸립니다.</p>
+      <div class="row">
+        <button class="primary" id="runAnalyze">오디오 분석</button>
+        <button class="primary" id="runTranscribe">음성 전사</button>
+        <label class="row muted"><input type="checkbox" id="forceTranscribe"> 처음부터 다시</label>
+      </div>
+      <div id="analyzeSummary" class="muted" style="margin-top:12px"></div>
+      <div class="list hidden" id="transcriptList" style="margin-top:12px"></div>
+    </section>
+
+    <!-- 5. 대본 정렬 -->
+    <section class="card panel hidden" data-step="align">
+      <h2>5. 대본 정렬 · 자막</h2>
+      <p class="desc">대본을 넣으면 표기는 대본대로, 타이밍은 전사 결과대로 자막을 만듭니다. 비워 두면 전사 결과를 그대로 씁니다.</p>
+      <label class="field">
+        <span>대본 (선택)</span>
+        <textarea id="scriptText" placeholder="영상에서 말한 내용을 그대로 붙여 넣으세요."></textarea>
+      </label>
+      <div class="row">
+        <label class="row muted"><input type="checkbox" id="useDictionary" checked> 용어 사전 적용</label>
+        <button class="primary" id="runAlign">자막 만들기</button>
+      </div>
+      <div class="list hidden" id="cueList" style="margin-top:12px"></div>
+    </section>
+
+    <!-- 6. 컷 편집 -->
+    <section class="card panel hidden" data-step="edit">
+      <h2>6. 컷 편집</h2>
+      <p class="desc">살릴 구간을 체크로 켜고 끕니다. 확정하면 자막 타이밍도 함께 당겨집니다.</p>
+      <div id="cutSummary" class="muted"></div>
+      <div class="row" style="margin:8px 0">
+        <button id="keepAll">전체 살리기</button>
+        <button id="dropShort">1초 미만 빼기</button>
+      </div>
+      <div class="list" id="cutList" style="max-height:420px"></div>
+      <div class="row end" style="margin-top:12px">
+        <button class="primary" id="confirmCut">컷 확정</button>
+      </div>
+    </section>
+
+    <!-- 7. 빌드 -->
+    <section class="card panel hidden" data-step="build">
+      <h2>7. 캡컷 드래프트 만들기</h2>
+      <p class="desc">확정한 컷과 자막으로 캡컷 드래프트를 생성합니다. 캡컷을 껐다 켜면 목록에 나타납니다.</p>
+      <label class="field"><span>드래프트 이름 (비우면 자동)</span><input type="text" id="buildName"></label>
+      <div class="grid2">
+        <label class="field"><span>배경음</span><select id="bgmSelect"></select></label>
+        <label class="field"><span>배경음 볼륨</span><input type="number" id="bgmVolume" value="0.12" step="0.01" min="0" max="1"></label>
+      </div>
+      <label class="row muted"><input type="checkbox" id="allowReplace"> 같은 이름이 있으면 덮어쓰기</label>
+      <div class="row end" style="margin-top:12px">
+        <button class="primary" id="runBuild">드래프트 생성</button>
+      </div>
+      <pre class="prompt hidden" id="buildResult"></pre>
+    </section>
+
+    <!-- 8. 마케팅 -->
+    <section class="card panel hidden" data-step="publish">
+      <h2>8. 마케팅 문구</h2>
+      <p class="desc">자막을 바탕으로 제목·설명·해시태그를 뽑는 프롬프트를 만듭니다. 원하는 AI 에 그대로 붙여 넣으세요.</p>
+      <div class="grid2">
+        <label class="field"><span>플랫폼</span><select id="pubPlatform"></select></label>
+        <label class="field"><span>말투</span><select id="pubTone"></select></label>
+        <label class="field"><span>가제</span><input type="text" id="pubTitle"></label>
+        <label class="field"><span>키워드 (쉼표로 구분)</span><input type="text" id="pubKeywords"></label>
+        <label class="field"><span>주 시청자</span><input type="text" id="pubAudience"></label>
+        <label class="field"><span>유도할 행동</span><input type="text" id="pubCta"></label>
+      </div>
+      <div class="row">
+        <button class="primary" id="runPrompt">프롬프트 만들기</button>
+        <button id="copyPrompt">복사</button>
+        <button id="downloadSrt">SRT 내려받기</button>
+      </div>
+      <pre class="prompt hidden" id="promptResult"></pre>
+    </section>
+
+  </main>
+
+  <!-- ------------------------------------------------------------ 로그 -->
+  <aside class="logpanel">
+    <div class="card">
+      <h2>작업</h2>
+      <div id="jobArea"><p class="muted">진행 중인 작업이 없습니다.</p></div>
+    </div>
+    <div class="card">
+      <h2>로그</h2>
+      <div class="logs" id="logs"></div>
+    </div>
+  </aside>
+
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>

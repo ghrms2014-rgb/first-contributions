@@ -1,0 +1,14 @@
+# 서버
+fastapi>=0.111
+uvicorn[standard]>=0.30
+pydantic>=2.7
+
+# 캡컷 드래프트 생성
+pycapcut>=0.0.3
+
+# 음성 전사 (설치하지 않으면 자동 자막만 비활성화되고 나머지는 그대로 동작한다)
+faster-whisper>=1.0
+
+# ffmpeg / ffprobe 는 pip 패키지가 아니라 별도로 설치해 PATH 에 넣어야 한다.
+#   윈도우: https://www.gyan.dev/ffmpeg/builds/ 에서 받아 bin 폴더를 PATH 에 추가
+#   맥:     brew install ffmpeg
